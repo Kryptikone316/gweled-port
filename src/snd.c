@@ -5,6 +5,7 @@
 #include <string.h>
 
 static int g_on = 1, g_have[3];
+static float g_vol = 1.0f;
 static const float k_gain[3] = { 0.55f, 0.85f, 0.85f };   /* the pack holds them normalised; these restore a sensible balance */
 
 void snd_init(void) {
@@ -18,4 +19,5 @@ void snd_init(void) {
     }
 }
 void snd_enable(int on) { g_on = on; }
-void snd_play(int id) { if (g_on && id >= 0 && id < 3 && g_have[id]) plat_snd_play(id, k_gain[id]); }
+void snd_set_volume(int percent) { g_vol = (percent < 0 ? 0 : percent > 100 ? 100 : percent) / 100.0f; }
+void snd_play(int id) { if (g_on && g_vol > 0 && id >= 0 && id < 3 && g_have[id]) plat_snd_play(id, k_gain[id] * g_vol); }

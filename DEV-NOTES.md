@@ -25,7 +25,7 @@ Files in the port folder: gweled.cfg (sound, music, musicvol, hints, name), gwel
   score popup bounce-in 500 ms / float up TILE/3 over 800 ms / fade at 700-800 ms, blink 200 ms period halves, hint bounce 350+150 ms
   for 2 s, hint after 15 s idle. Level bar uses the original thresholds (100, 200, 400...); bonus = 8 random single gems (10 pts).
 - Timed mode: every 1.25 s (25 board ticks) the bar drains by steps_for_timer; level-up resets it to the middle.
-- Menus (2026-11-19): Game (Continue Saved Game if any, Normal, Timed, Endless), Settings (Sound Effects, Music, Music Volume, Show Hints), Scores (tabs Normal/Timed/Endless; Endless
+- Menus (2026-11-19): Game (Continue Saved Game if any, Normal, Timed, Endless), Settings (Sound Effects, Effects Volume, Music, Music Volume, Show Hints), Scores (tabs Normal/Timed/Endless; Endless
   shows 'not scored'), Help (5 pages: How to Play, Controls, Game Types, Scoring and Levels, About), Exit Game. B goes back one level.
   SELECT+START at any moment: cfg_save() + plat_quit(0) (display, mixer, SDL shut down, exit code 0) - an unsaved game in progress is NOT saved.
   Test hooks added: GWL_HELP=<page>, GWL_MSG=<text>, GWL_OSKTEST=<score>. Text-fit check: worst-case names/scores/messages were screenshotted.
@@ -49,7 +49,7 @@ the quietest, gains 0..-2.9 dB). src/music.c streams them with stb_vorbis (src/s
 SF3500 = sf3500_mixer stream voice, host = SDL callback). Same design as Defense Mania's audio.cpp: file opened on a thread, random track never the one
 that just played in that scene, next track when one ends, fade out 700 ms / in 1.6 s on a scene change. Scene = music_scene() in game.c: menu screens
 (title, settings, scores, help, name entry, after game over) = Menu; a running game incl. pause/confirm and scores/help opened from pause = its mode's folder.
-Settings rows Music On/Off + Music Volume (Left/Right 10 % steps, A +10 wrapping), pause menu has Music toggle; cfg keys music=, musicvol= (default 1, 50).
+Settings rows Music On/Off + Music Volume (Left/Right 10 % steps, A +10 wrapping), pause menu has Music toggle; cfg keys music=, musicvol= (default 1, 50), sfxvol= (default 100 = the tuned k_gain balance; snd_set_volume scales k_gain).
 Music off or volume 0 stops the stream and decoder completely. A missing music folder = silence, no error. Own tracks can be dropped into the folders.
 Test hooks: GWL_MUSIC=<dir> (instead of ./music), GWL_MUSICTEST=<speed> (no device: decode at <speed>x real time, logs track starts/ends and decode %).
 Host: decoding is 0.3 % of play time; QEMU mipsel 12 % (emulator, not the device). Device: decode CPU, volume balance against the effects, fades: not measured.

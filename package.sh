@@ -24,4 +24,4 @@ tar -C . --exclude='./build-*' --exclude='./package' --exclude='./work' --exclud
     --transform 's,^\./,gweled-sf3500/,' -cJf "$OUT/gweled/licenses/gweled-sf3500-source.tar.xz" .
 [ -f "$HOME/handhelds/Development/Datafrog/SF3500/ports/gweled/Installer/gweled-1.0-beta2.tar.xz" ] && cp "$HOME/handhelds/Development/Datafrog/SF3500/ports/gweled/Installer/gweled-1.0-beta2.tar.xz" "$OUT/gweled/licenses/"
 chmod +x "$OUT/Gweled.sh" "$OUT/gweled/run.sh" "$OUT/gweled/gweled.mipsel"
-(cd "$OUT" && find . -type f | sort | xargs md5sum)
+(cd "$OUT" && find . -type f -print0 | sort -z | xargs -0 md5sum)

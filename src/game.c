@@ -202,7 +202,7 @@ static Gem* g_hint_gem;
 static int g_game_over_reported;
 
 /* options saved to gweled.cfg */
-static int g_sound = 1, g_hints = 1, g_music = 1, g_musicvol = 50;
+static int g_sound = 1, g_hints = 1, g_music = 1, g_musicvol = 50, g_sfxvol = 100;
 static char g_name[16] = "Player";
 
 static void clear_cursors(void) { int i; for (i = 0; i < 4; i++) g_cur[i].used = 0; g_cursor0 = -1; }
@@ -403,6 +403,7 @@ static void cfg_load(void) {
         if (sscanf(line, "sound=%d", &v) == 1) g_sound = v != 0;
         else if (sscanf(line, "hints=%d", &v) == 1) g_hints = v != 0;
         else if (sscanf(line, "music=%d", &v) == 1) g_music = v != 0;
+        else if (sscanf(line, "sfxvol=%d", &v) == 1) g_sfxvol = v < 0 ? 0 : v > 100 ? 100 : v / 10 * 10;
         else if (sscanf(line, "musicvol=%d", &v) == 1) g_musicvol = v < 0 ? 0 : v > 100 ? 100 : v / 10 * 10;
         else if (!strncmp(line, "name=", 5)) {
             size_t n;
@@ -417,7 +418,7 @@ static void cfg_load(void) {
 static void cfg_save(void) {
     FILE* f = fopen(CFG_FILE, "w");
     if (!f) return;
-    fprintf(f, "sound=%d\nmusic=%d\nmusicvol=%d\nhints=%d\nname=%s\n", g_sound, g_music, g_musicvol, g_hints, g_name);
+    fprintf(f, "sound=%d\nsfxvol=%d\nmusic=%d\nmusicvol=%d\nhints=%d\nname=%s\n", g_sound, g_sfxvol, g_music, g_musicvol, g_hints, g_name);
     fclose(f);
 }
 
@@ -840,13 +841,13 @@ static void osk_draw(int score) {
 /* ---- screens: title ---- */
 
 typedef struct { const char* label; int id; } Row;
-enum { R_CONTINUE = 1, R_NORMAL, R_TIMED, R_ENDLESS, R_SOUND, R_HINTS, R_MUSIC, R_MVOL, R_GAME, R_SETTINGS, R_SCORES, R_HELP, R_EXIT };
+enum { R_CONTINUE = 1, R_NORMAL, R_TIMED, R_ENDLESS, R_SOUND, R_HINTS, R_MUSIC, R_MVOL, R_SVOL, R_GAME, R_SETTINGS, R_SCORES, R_HELP, R_EXIT };
 static Row g_rows[12];
-static char g_rowtxt[4][32];
+static char g_rowtxt[5][32];
 static int g_nrows;
 
 /* Main menu: Game, Settings, Scores, Help, Exit Game.  Game: [Continue Saved Game], Normal, Timed, Endless.
- * Settings: Sound Effects, Music, Music Volume, Show Hints. */
+ * Settings: Sound Effects, Effects Volume, Music, Music Volume, Show Hints. */
 static void build_title_rows(void) {
     g_nrows = 0;
     if (g_menu == 1) {
@@ -859,7 +860,9 @@ static void build_title_rows(void) {
         snprintf(g_rowtxt[1], sizeof g_rowtxt[1], "Show Hints: %s", g_hints ? "On" : "Off");
         snprintf(g_rowtxt[2], sizeof g_rowtxt[2], "Music: %s", g_music ? "On" : "Off");
         snprintf(g_rowtxt[3], sizeof g_rowtxt[3], "Music Volume: %d%%", g_musicvol);
+        snprintf(g_rowtxt[4], sizeof g_rowtxt[4], "Effects Volume: %d%%", g_sfxvol);
         g_rows[g_nrows++] = (Row){ g_rowtxt[0], R_SOUND };
+        g_rows[g_nrows++] = (Row){ g_rowtxt[4], R_SVOL };
         g_rows[g_nrows++] = (Row){ g_rowtxt[2], R_MUSIC };
         g_rows[g_nrows++] = (Row){ g_rowtxt[3], R_MVOL };
         g_rows[g_nrows++] = (Row){ g_rowtxt[1], R_HINTS };
@@ -898,7 +901,7 @@ static void wrap_text(const Font* f, int cx, int y, int maxw, uint32_t col, cons
 static const char* row_description(int id) {
     switch (id) {
     case R_GAME: return "Start a new game or pick up a saved one.";
-    case R_SETTINGS: return "Sound effects, music and hints.";
+    case R_SETTINGS: return "Sound effects, music, their volumes and hints.";
     case R_SCORES: return "The best scores of each game type.";
     case R_HELP: return "How to play, the controls and the game types.";
     case R_EXIT: return "Leave Gweled and go back to the menu.";
@@ -907,6 +910,7 @@ static const char* row_description(int id) {
     case R_TIMED: return S_DESC_TIMED;
     case R_ENDLESS: return S_DESC_ENDLESS;
     case R_SOUND: return "Turn the sound effects on or off.";
+    case R_SVOL: return "Left and Right change how loud the sound effects are.";
     case R_MUSIC: return "Turn the background music on or off.";
     case R_MVOL: return "Left and Right change how loud the music is.";
     case R_HINTS: return "Show a possible move after 15 seconds without one.";
@@ -1093,7 +1097,7 @@ static void draw_confirm(void) {
 }
 
 /* ---- audio / settings glue ---- */
-static void apply_sound(void) { snd_enable(g_sound); }
+static void apply_sound(void) { snd_enable(g_sound); snd_set_volume(g_sfxvol); }
 static void apply_music(void) { music_set_volume(g_musicvol); music_set_enabled(g_music); }
 
 /* ---- input with repeat ---- */
@@ -1226,11 +1230,13 @@ int main(void) {
             if (press & B_UP) { g_sel = (g_sel + g_nrows - 1) % g_nrows; snd_play(SND_CLICK); }
             if (press & B_DOWN) { g_sel = (g_sel + 1) % g_nrows; snd_play(SND_CLICK); }
             id = g_rows[g_sel].id;
-            if (id == R_MVOL && (press & (B_LEFT | B_RIGHT | B_A | B_START))) {     /* 10% steps; A wraps round from 100 to 0 */
-                int v = g_musicvol + ((press & B_LEFT) ? -10 : 10);
+            if ((id == R_MVOL || id == R_SVOL) && (press & (B_LEFT | B_RIGHT | B_A | B_START))) {     /* 10% steps; A wraps round from 100 to 0 */
+                int* vol = id == R_MVOL ? &g_musicvol : &g_sfxvol;
+                int v = *vol + ((press & B_LEFT) ? -10 : 10);
                 if (v > 100) v = (press & B_RIGHT) ? 100 : 0;
-                g_musicvol = v < 0 ? 0 : v;
-                music_set_volume(g_musicvol); cfg_save(); build_title_rows(); snd_play(SND_CLICK);
+                *vol = v < 0 ? 0 : v;
+                if (id == R_MVOL) music_set_volume(g_musicvol); else snd_set_volume(g_sfxvol);
+                cfg_save(); build_title_rows(); snd_play(SND_CLICK);
                 press &= ~(B_LEFT | B_RIGHT | B_A | B_START);
             }
             if ((press & (B_LEFT | B_RIGHT)) && (id == R_SOUND || id == R_HINTS || id == R_MUSIC)) press |= B_A;

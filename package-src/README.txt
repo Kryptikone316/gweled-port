@@ -31,8 +31,8 @@ points each) and a higher level; every second level raises the points per gem.
 MENUS
 -----
   Game       Continue Saved Game (when there is one), Normal, Timed, Endless
-  Settings   Sound Effects on/off, Music on/off, Music Volume (Left/Right, steps of 10%),
-             Show Hints on/off
+  Settings   Sound Effects on/off, Effects Volume, Music on/off, Music Volume
+             (volumes: Left/Right, steps of 10%), Show Hints on/off
   Scores     the best ten of the Normal and Timed games (Endless has none);
              X on that screen clears the list you are looking at
              (Normal or Timed, each on its own), after a Yes/No question
@@ -48,7 +48,7 @@ is in the Game menu; a saved game is used once.
 
 FILES (in this folder)
 ----------------------
-  gweled.cfg      sound, music, music volume and hints, the name used for high scores
+  gweled.cfg      sound, music, both volumes and hints, the name used for high scores
   music/          the music: two tracks each for the menus and the Normal, Timed and
                   Endless games (music/Menu, Normal, Timed, Endless; Ogg Vorbis)
   gweled.scores   the ten best scores of the Normal and Timed games
