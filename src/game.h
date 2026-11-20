@@ -8,6 +8,8 @@
 #define BX 12
 #define BY 16
 #define BSIZE (TILE * BW)
+#define PANEL_X (BX + BSIZE + 8)          /* the score panel to the right of the board */
+#define PANEL_W (640 - PANEL_X - 6)
 
 /* easing modes (the Clutter ones the original used) */
 enum { EZ_LINEAR, EZ_OUT_CUBIC, EZ_IN_OUT_CUBIC, EZ_IN_QUAD, EZ_IN_OUT_QUAD, EZ_OUT_BOUNCE, EZ_OUT_BACK };

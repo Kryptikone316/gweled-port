@@ -537,7 +537,7 @@ static uint16_t* g_screenbuf;                 /* the device/desktop frame buffer
 
 static void draw_panel_static(void);
 static void build_static(void) {
-    int i, j, px = BX + BSIZE + 8, pw = SCR_W - px - 12;
+    int i, j, px = PANEL_X, pw = PANEL_W;
     d_target(g_static);
     d_clip(0, 0, SCR_W, SCR_H);
     d_vgrad(0, 0, SCR_W, SCR_H, COL_BG2, COL_BG1);
@@ -673,10 +673,10 @@ static void draw_pops(void) {
 
 /* The panel's fixed parts (title, labels, key legend) are painted once into the static layer. */
 static void draw_panel_static(void) {
-    int px = BX + BSIZE + 8, pw = SCR_W - px - 12, cx = px + pw / 2, y = BY + 6;
+    int px = PANEL_X, pw = PANEL_W, cx = px + pw / 2, y = BY + 6;
     Font *f14 = font_get("f14"), *f24 = font_get("f24");
     static const char* const keys[5] = { "A", "B", "D-pad", "SELECT", "START" };
-    static const char* const what[5] = { "Pick gem", "Cancel", "Move/swap", "Hint", "Menu" };
+    static const char* const what[5] = { "Pick gem", "Cancel", "Move", "Hint", "Menu" };
     int k;
     d_text_c(f24, cx, y, COL_GOLD, 0, 255, "Gweled");
     y += 34;
@@ -685,15 +685,16 @@ static void draw_panel_static(void) {
     d_text_c(f14, cx, y, COL_DIM, 0, 255, "SCORE");
     y = BY + BSIZE - 128;
     d_rect(px + 12, y - 8, pw - 24, 1, 0x5a4020);
-    for (k = 0; k < 5; k++, y += 20) { d_text(f14, px + 10, y, COL_GOLD, 0, 255, keys[k]); d_text(f14, px + 72, y, COL_TEXT, 0, 255, what[k]); }
+    for (k = 0; k < 5; k++, y += 20) { d_text(f14, px + 10, y, COL_GOLD, 0, 255, keys[k]); d_text(f14, px + 74, y, COL_TEXT, 0, 255, what[k]); }
 }
 
 static void draw_panel(void) {
-    int px = BX + BSIZE + 8, pw = SCR_W - px - 12, cx = px + pw / 2, y = BY + 6 + 34 + 10 + 16;
+    int px = PANEL_X, pw = PANEL_W, cx = px + pw / 2, y = BY + 6 + 34 + 10 + 16;
     char b[48];
     Font *f14 = font_get("f14"), *f18 = font_get("f18"), *f32 = font_get("f32");
     snprintf(b, sizeof b, "%06d", g_cur_score);
-    d_text_c(f32, cx, y, 0xffffff, 0, 255, b);
+    if (font_w(f32, b) > pw - 24) d_text_c(font_get("f24"), cx, y + 6, 0xffffff, 0, 255, b);     /* 7+ digits */
+    else d_text_c(f32, cx, y, 0xffffff, 0, 255, b);
     y += 50;
     if (g_mode_playing != MODE_ENDLESS) {
         int bw = pw - 24, fill = bonus_fraction_256() * bw / 256;
@@ -748,8 +749,14 @@ static int g_osk_len, g_osk_cx, g_osk_cy;
 static const char* const k_osk_rows[] = { "ABCDEFGHIJ", "KLMNOPQRST", "UVWXYZ0123", "456789-_. ", "<!" };
 static int g_osk_shift;      /* 1 = lower case */
 
+/* names must fit the entry box (f24) and a high-score row (f18) */
+#define NAME_W18 196
+#define NAME_W24 272
+static int name_fits(const char* s) { return font_w(font_get("f18"), s) <= NAME_W18 && font_w(font_get("f24"), s) <= NAME_W24; }
+
 static void osk_open(const char* initial) {
     snprintf(g_osk_buf, sizeof g_osk_buf, "%s", initial);
+    while (g_osk_buf[0] && !name_fits(g_osk_buf)) g_osk_buf[strlen(g_osk_buf) - 1] = 0;
     g_osk_len = (int)strlen(g_osk_buf); g_osk_cx = 0; g_osk_cy = 0; g_osk_shift = 0;
 }
 
@@ -766,7 +773,12 @@ static int osk_input(unsigned press) {
         char ch = k_osk_rows[g_osk_cy][g_osk_cx];
         if (ch == '<') { if (g_osk_len) g_osk_buf[--g_osk_len] = 0; snd_play(SND_CLICK); }
         else if (ch == '!') { if (g_osk_len) return 1; }
-        else if (g_osk_len < 12) { if (g_osk_shift && ch >= 'A' && ch <= 'Z') ch = (char)(ch + 32); g_osk_buf[g_osk_len++] = ch; g_osk_buf[g_osk_len] = 0; snd_play(SND_CLICK); }
+        else if (g_osk_len < 12) {
+            if (g_osk_shift && ch >= 'A' && ch <= 'Z') ch = (char)(ch + 32);
+            g_osk_buf[g_osk_len] = ch; g_osk_buf[g_osk_len + 1] = 0;
+            if (name_fits(g_osk_buf)) { g_osk_len++; snd_play(SND_CLICK); }
+            else g_osk_buf[g_osk_len] = 0;                       /* no room for another letter */
+        }
     }
     if ((press & B_B) && g_osk_len) { g_osk_buf[--g_osk_len] = 0; snd_play(SND_CLICK); }
     if ((press & B_START) && g_osk_len) return 1;
@@ -813,7 +825,7 @@ static int g_nrows;
 
 static void build_title_rows(void) {
     g_nrows = 0;
-    if (save_exists()) g_rows[g_nrows++] = (Row){ "Continue Saved Game", R_CONTINUE };
+    if (save_exists()) g_rows[g_nrows++] = (Row){ "Continue Game", R_CONTINUE };
     g_rows[g_nrows++] = (Row){ "Normal Game", R_NORMAL };
     g_rows[g_nrows++] = (Row){ "Timed Game", R_TIMED };
     g_rows[g_nrows++] = (Row){ "Endless Game", R_ENDLESS };
@@ -889,12 +901,17 @@ static void draw_scores(void) {
         int hl = (g_scores_hl == i && g_scores_tab == g_scores_from_game);
         if (hl) d_round_a(130, y + i * 32 - 1, 380, 30, 6, COL_GOLD, 60);
         snprintf(b, sizeof b, "%d.", i + 1);
-        d_text_r(f18, 164, y + i * 32 + 2, COL_DIM, 0, 255, b);
+        d_text_r(f18, 168, y + i * 32 + 2, COL_DIM, 0, 255, b);
         if (s->score) {
-            d_text(f18, 176, y + i * 32 + 2, hl ? 0xffffff : COL_TEXT, 0, 255, s->name);
+            char nm[16];
+            int room;
             snprintf(b, sizeof b, "%d", s->score);
+            room = 500 - font_w(f18, b) - 14 - 180;
+            snprintf(nm, sizeof nm, "%s", s->name);
+            while (nm[0] && font_w(f18, nm) > room) nm[strlen(nm) - 1] = 0;
+            d_text(f18, 180, y + i * 32 + 2, hl ? 0xffffff : COL_TEXT, 0, 255, nm);
             d_text_r(f18, 500, y + i * 32 + 2, COL_GOLD, 0, 255, b);
-        } else d_text(f18, 176, y + i * 32 + 2, 0x5a4a44, 0, 255, "-");
+        } else d_text(f18, 180, y + i * 32 + 2, 0x5a4a44, 0, 255, "-");
     }
     (void)f24;
     d_text_c(f14, SCR_W / 2, 454, COL_DIM, 0, 255, "Left/Right  switch game type     A or B  back");
@@ -1049,6 +1066,8 @@ int main(void) {
     build_title_rows();
     g_now = now_ms();
     if (getenv("GWL_AUTOSTART")) start_game(atoi(getenv("GWL_AUTOSTART")), 0);
+    if (getenv("GWL_MSG")) message(getenv("GWL_MSG"), 0);                                   /* test hook: a game message */
+    if (getenv("GWL_OSKTEST")) { E.score = atoi(getenv("GWL_OSKTEST")); g_mode_playing = 0; osk_open("WWWWWWWWWWWW"); g_screen = SC_NAME; }   /* test hook */
 
     for (;;) {
         unsigned held = plat_buttons(), press;
