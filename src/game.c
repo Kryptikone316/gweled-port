@@ -422,19 +422,32 @@ static void cfg_save(void) {
 typedef struct { char name[16]; int score; } Score;
 static Score g_scores[2][NSC];
 
+static int score_cmp(const void* a, const void* b) { return ((const Score*)b)->score - ((const Score*)a)->score; }   /* best first */
+
+/* Only the ten best of each list are kept, whatever the file holds. */
 static void scores_load(void) {
     FILE* f = fopen(SCORE_FILE, "r");
     char line[96];
+    static Score tmp[2][256];
+    int n[2] = { 0, 0 }, m, i;
     memset(g_scores, 0, sizeof g_scores);
     if (!f) return;
     while (fgets(line, sizeof line, f)) {
-        int m, s, i;
+        int mm, sc;
         char nm[16] = "";
-        if (sscanf(line, "%d|%d|%15[^\r\n]", &m, &s, nm) >= 2 && (m == 0 || m == 1) && s > 0) {
-            for (i = 0; i < NSC; i++) if (!g_scores[m][i].score) { g_scores[m][i].score = s; snprintf(g_scores[m][i].name, 16, "%s", nm); break; }
+        if (sscanf(line, "%d|%d|%15[^\r\n]", &mm, &sc, nm) >= 2 && (mm == 0 || mm == 1) && sc > 0 && n[mm] < 256) {
+            tmp[mm][n[mm]].score = sc; snprintf(tmp[mm][n[mm]].name, 16, "%s", nm); n[mm]++;
         }
     }
     fclose(f);
+    for (m = 0; m < 2; m++) {
+        qsort(tmp[m], (size_t)n[m], sizeof(Score), score_cmp);
+        for (i = 0; i < NSC && i < n[m]; i++) g_scores[m][i] = tmp[m][i];
+    }
+}
+static void scores_clear(void) {
+    memset(g_scores, 0, sizeof g_scores);
+    remove(SCORE_FILE);
 }
 static void scores_save(void) {
     FILE* f = fopen(SCORE_FILE, "w");
@@ -491,8 +504,10 @@ static int save_read(void) {                         /* validates everything; 0 
 }
 
 /* ------------------------------------------------------------------ screens */
-typedef enum { SC_TITLE, SC_GAME, SC_PAUSE, SC_CONFIRM, SC_NAME, SC_SCORES, SC_HELP } Screen;
+typedef enum { SC_TITLE, SC_GAME, SC_PAUSE, SC_CONFIRM, SC_NAME, SC_SCORES, SC_RESET, SC_HELP } Screen;
 static Screen g_screen = SC_TITLE;
+static int g_reset_sel;                      /* 0 Yes, 1 No (starts on No) */
+static unsigned g_toast_until;               /* 'Scores cleared' notice on the scores screen */
 static int g_menu, g_sel_main, g_help_page;     /* g_menu: 0 main, 1 Game, 2 Settings */
 static int g_sel, g_pause_sel, g_conf_sel, g_scores_tab, g_scores_hl = -1, g_scores_from_game;
 static int g_mode_playing;
@@ -944,7 +959,18 @@ static void draw_scores(void) {
         } else d_text(f18, 180, y + i * 32 + 2, 0x5a4a44, 0, 255, "-");
     }
     (void)f24;
-    d_text_c(f14, SCR_W / 2, 454, COL_DIM, 0, 255, "Left/Right  game type     A or B  back");
+    if (g_now < g_toast_until) d_text_c(f18, SCR_W / 2, 440, COL_GOLD, 0, 255, "High scores cleared.");
+    else d_text_c(f14, SCR_W / 2, 454, COL_DIM, 0, 255, "Left/Right  game type     X  reset scores     A or B  back");
+}
+
+static void draw_reset(void) {
+    const char* rows[2] = { "Yes, clear them", "No, keep them" };
+    draw_scores();
+    d_rect_a(0, 0, SCR_W, SCR_H, 0x000000, 170);
+    panel_box(110, 120, 420, 250);
+    d_text_c(font_get("f24"), SCR_W / 2, 134, COL_GOLD, 0, 255, "Clear High Scores?");
+    wrap_text(font_get("f14"), SCR_W / 2, 176, 380, COL_TEXT, "This erases ALL the Normal and Timed high scores. Once they are cleared they are gone for good and cannot be brought back.");
+    draw_menu_rows(SCR_W / 2, 262, 260, 40, rows, 2, g_reset_sel);
 }
 
 #define HELP_PAGES 5
@@ -1240,11 +1266,21 @@ int main(void) {
         case SC_SCORES:
             if (press & B_LEFT) { g_scores_tab = (g_scores_tab + 2) % 3; snd_play(SND_CLICK); }
             if (press & B_RIGHT) { g_scores_tab = (g_scores_tab + 1) % 3; snd_play(SND_CLICK); }
-            if (press & (B_A | B_B | B_START)) {
+            if (press & B_X) { g_reset_sel = 1; g_screen = SC_RESET; snd_play(SND_CLICK); }
+            else if (press & (B_A | B_B | B_START)) {
                 if (g_running || g_paused) { if (g_over_dim) leave_to_title(); else g_screen = SC_PAUSE; }
                 else menu_goto(0, g_sel_main), g_screen = SC_TITLE;
             }
-            draw_scores();
+            if (g_screen == SC_SCORES) draw_scores();
+            break;
+        case SC_RESET:
+            if (press & (B_UP | B_DOWN | B_LEFT | B_RIGHT)) { g_reset_sel = !g_reset_sel; snd_play(SND_CLICK); }
+            if (press & B_B) g_screen = SC_SCORES;
+            if (press & B_A) {
+                if (g_reset_sel == 0) { scores_clear(); g_scores_hl = -1; g_toast_until = g_now + 2500; snd_play(SND_EXPLODE); }
+                g_screen = SC_SCORES;
+            }
+            if (g_screen == SC_RESET) draw_reset(); else draw_scores();
             break;
         case SC_HELP:
             if (press & B_LEFT) { if (g_help_page > 0) { g_help_page--; snd_play(SND_CLICK); } }
