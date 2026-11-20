@@ -676,8 +676,40 @@ static unsigned long long blank_cells(const uint16_t* buf) {
     return m;
 }
 
+static void draw_one_gem(const GemDraw* d) {
+    d_clip(BX, BY, BSIZE, BSIZE);
+    if (d->sx > 1.01f || d->sy > 1.01f) d_img_s(&g_gemzoom[d->type], BX + d->x, BY + d->y, d->sx * TILE / 72.0f, d->sy * TILE / 72.0f, d->op);
+    else d_img_s(&g_gemimg[d->type], BX + d->x, BY + d->y, d->sx, d->sy, d->op);
+    d_clip(0, 0, SCR_W, SCR_H);
+}
+
+/* On the device a gem is now and then not drawn at all (the log says so: a fresh render with a bare cell). The cause is not known yet, so look:
+ * the middle of every gem that is drawn solidly must differ from the bare background; if it does not, draw that gem again. */
+static int g_miss_logged;
+static int fix_missing_gems(uint16_t* dst, const GemDraw* gd, int n) {
+    int i, tries, fixed = 0;
+    for (i = 0; i < n; i++) {
+        const GemDraw* d = &gd[i];
+        int px, py, bad;
+        if (d->op < 128) continue;
+        px = (int)(BX + d->x); py = (int)(BY + d->y);
+        if (px < BX + 4 || px >= BX + BSIZE - 4 || py < BY + 4 || py >= BY + BSIZE - 4) continue;
+        bad = dst[(size_t)py * SCR_W + px] == g_static[(size_t)py * SCR_W + px];
+        for (tries = 0; bad && tries < 3; tries++) {
+            draw_one_gem(d);
+            bad = dst[(size_t)py * SCR_W + px] == g_static[(size_t)py * SCR_W + px];
+            if (g_miss_logged < 40) fprintf(stderr, "gweled: CHECK frame %u: gem %d (type %d at %.1f,%.1f scale %.3f,%.3f op %d) was not drawn; draw again %d: %s\n", plat_frame(), i, d->type, d->x, d->y, d->sx, d->sy, d->op, tries + 1, bad ? "still missing" : "ok");
+            g_miss_logged++;
+        }
+        if (!bad && tries) fixed++;
+    }
+    return fixed;
+}
+
 static void render_board(uint16_t* dst, const GemDraw* gd, int n) {
-    d_target(dst); d_clip(0, 0, SCR_W, SCR_H); d_copy(g_static); draw_gems_from(gd, n); d_target(g_screenbuf);
+    d_target(dst); d_clip(0, 0, SCR_W, SCR_H); d_copy(g_static); draw_gems_from(gd, n);
+    fix_missing_gems(dst, gd, n);
+    d_target(g_screenbuf);
 }
 
 static unsigned sum_words(const void* p, size_t bytes) { const unsigned* w = (const unsigned*)p; unsigned a = 0; size_t i; for (i = 0; i < bytes / 4; i++) a = a * 31u + w[i]; return a; }
