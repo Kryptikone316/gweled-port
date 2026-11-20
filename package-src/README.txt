@@ -60,7 +60,8 @@ MUSIC
 -----
 The menus and each game type have their own music; two tracks take turns, and
 the music fades when you go from the menus into a game and back. Music and its
-volume are in Settings (and in the pause menu). To use your own
+volume are in Settings (and in the pause menu). The music is
+free to use: CC0, public domain (licenses/Music-LICENCE.txt). To use your own
 music put .ogg files in those folders; music/loudness.txt only evens out the
 eight supplied tracks and may be deleted.
 
@@ -71,3 +72,4 @@ Original game (c) 2003-2005 Sebastien Delestaing, (c) 2010-2026 Daniele
 Napolitano. SF3500 version (c) 2026 AthruZ (Kryptikone316). See NOTICE.md and
 the licenses folder; the complete source of this port is in
 licenses/gweled-sf3500-source.tar.xz.
+The music (music/) is dedicated to the public domain under CC0 1.0.

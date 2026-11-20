@@ -1190,6 +1190,7 @@ static void draw_help(void) {
         d_text_c(f14, SCR_W / 2, y, COL_TEXT, 0, 255, "gweled.org"); y += 34;
         d_text_c(f14, SCR_W / 2, y, COL_TEXT, 0, 255, "SF3500 version and music by AthruZ (Kryptikone316)"); y += 34;
         d_text_c(f14, SCR_W / 2, y, COL_DIM, 0, 255, "GNU General Public License, version 2 or later."); y += 22;
+        d_text_c(f14, SCR_W / 2, y, COL_DIM, 0, 255, "Music: CC0, public domain."); y += 22;
         d_text_c(f14, SCR_W / 2, y, COL_DIM, 0, 255, "Text set in DejaVu Sans Bold (free licence)."); y += 34;
         break;
     }

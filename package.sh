@@ -16,6 +16,7 @@ if [ -d "$MUSIC_SRC" ]; then
     mkdir -p "$OUT/gweled/music"
     for d in Menu Normal Timed Endless; do cp -r "$MUSIC_SRC/$d" "$OUT/gweled/music/"; done
     cp assets-src/music-loudness.txt "$OUT/gweled/music/loudness.txt"
+    cp licenses/Music-LICENCE.txt "$OUT/gweled/music/LICENCE.txt"; cp licenses/Music-CC0-1.0-legalcode.txt "$OUT/gweled/music/CC0-1.0-legalcode.txt"   # the music travels alone sometimes
 else
     echo "WARNING: no music folder at $MUSIC_SRC, package has no music" >&2
 fi

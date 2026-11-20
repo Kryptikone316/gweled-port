@@ -1,0 +1,17 @@
+Gweled for the SF3500 - music
+=============================
+
+The eight music tracks in the music/ folder (Menu, Normal, Timed and Endless, two each) were made for
+this port by AthruZ (Kryptikone316).
+
+To the extent possible under law, the author has dedicated all copyright and related and neighbouring
+rights in these tracks to the public domain worldwide, under the Creative Commons CC0 1.0 Universal
+Public Domain Dedication. You can copy, modify, distribute and perform them, even for commercial
+purposes, all without asking permission. No credit is required, though it is appreciated.
+
+  https://creativecommons.org/publicdomain/zero/1.0/
+  The full legal text is in Music-CC0-1.0-legalcode.txt next to this file (in the game's
+  licenses/ folder).
+
+This applies to the music only. The game itself is under the GNU General Public License,
+version 2 or (at your option) any later version; see NOTICE.md and licenses/.

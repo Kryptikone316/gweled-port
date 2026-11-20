@@ -13,9 +13,11 @@ not affiliated with or endorsed by the Gweled authors.
 * The gem pictures (from the original SVG files, rasterised at build time) and the three sound
   effects (click, swap, explode) are the original's. The original project's About dialog also
   lists Wesley Ellis as an author, and credits the explode sound to Crunchpix.
-* The eight music tracks (`music/`) were made for this port by its author. They are not part of
-  the original Gweled, which ships no music. They are played with the stb_vorbis decoder (Sean
-  Barrett, public domain), built into the game.
+* The eight music tracks (`music/`) were made for this port by its author and are dedicated to the
+  public domain under Creative Commons CC0 1.0 (`licenses/Music-LICENCE.txt`,
+  `licenses/Music-CC0-1.0-legalcode.txt`). They are not part of the original Gweled, which ships
+  no music. They are played with the stb_vorbis decoder (Sean Barrett, public domain), built into
+  the game.
 * Text is set in DejaVu Sans Bold, rasterised into the game at build time
   (`licenses/DejaVu-fonts-LICENSE.txt`).
 * The box art was supplied by the port author and is used only to identify the game.

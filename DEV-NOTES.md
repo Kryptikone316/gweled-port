@@ -43,7 +43,7 @@ QEMU mipsel (frames differ by at most 1 level per channel).
 QEMU: flatpak-spawn --host --directory=$PWD --env=GWL_...=... qemu-mipsel-static -L <buildroot sysroot> build-sf3500/gweled.stripped.mipsel
 
 ## Music (2026-11-19)
-Eight Ogg Vorbis tracks made by the user (48 kHz stereo, 3-7 min, 41 MB), source ports/gweled/Custom/Music/{Menu,Normal,Timed,Endless}, two each.
+Eight Ogg Vorbis tracks made by the user (licence: CC0 1.0, decided 2026-11-20; licenses/Music-LICENCE.txt + the legal code, also copied into music/) (48 kHz stereo, 3-7 min, 41 MB), source ports/gweled/Custom/Music/{Menu,Normal,Timed,Endless}, two each.
 package.sh copies them to package/gweled/music/ with loudness.txt (assets-src/music-loudness.txt, made by tools/make_loudness.py: tracks levelled to
 the quietest, gains 0..-2.9 dB). src/music.c streams them with stb_vorbis (src/stb_vorbis.h, impl in stb_vorbis_impl.c) through plat_stream_* (plat_sdl.c:
 SF3500 = sf3500_mixer stream voice, host = SDL callback). Same design as Defense Mania's audio.cpp: file opened on a thread, random track never the one
