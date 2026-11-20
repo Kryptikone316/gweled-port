@@ -16,7 +16,8 @@ CONTROLS
   D-pad (after A)  swap the picked gem with the neighbour in that direction
                (A on a neighbour works too; A on the same gem, or B, drops it)
   SELECT       show a hint (a gem bounces)
-  START        pause menu: Resume, Show Hints, Sound Effects, Music, Scores, Quit to Menu
+  START        pause menu: Resume, Show Hints, Sound Effects, Effects Volume, Music,
+               Music Volume, Scores, Quit to Menu
   SELECT + START   leave Gweled from any screen, back to the front-end
 
 GAME TYPES
@@ -59,7 +60,7 @@ MUSIC
 -----
 The menus and each game type have their own music; two tracks take turns, and
 the music fades when you go from the menus into a game and back. Music and its
-volume are in Settings (Music is also in the pause menu). To use your own
+volume are in Settings (and in the pause menu). To use your own
 music put .ogg files in those folders; music/loudness.txt only evens out the
 eight supplied tracks and may be deleted.
 

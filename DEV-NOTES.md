@@ -49,7 +49,7 @@ the quietest, gains 0..-2.9 dB). src/music.c streams them with stb_vorbis (src/s
 SF3500 = sf3500_mixer stream voice, host = SDL callback). Same design as Defense Mania's audio.cpp: file opened on a thread, random track never the one
 that just played in that scene, next track when one ends, fade out 700 ms / in 1.6 s on a scene change. Scene = music_scene() in game.c: menu screens
 (title, settings, scores, help, name entry, after game over) = Menu; a running game incl. pause/confirm and scores/help opened from pause = its mode's folder.
-Settings rows Music On/Off + Music Volume (Left/Right 10 % steps, A +10 wrapping), pause menu has Music toggle; cfg keys music=, musicvol= (default 1, 50), sfxvol= (default 100 = the tuned k_gain balance; snd_set_volume scales k_gain).
+Settings rows Music On/Off + Music Volume (Left/Right 10 % steps, A +10 wrapping), pause menu has the same sound rows (toggles + both volumes, 8 rows at 36 px); cfg keys music=, musicvol= (default 1, 50), sfxvol= (default 100 = the tuned k_gain balance; snd_set_volume scales k_gain).
 Music off or volume 0 stops the stream and decoder completely. A missing music folder = silence, no error. Own tracks can be dropped into the folders.
 Test hooks: GWL_MUSIC=<dir> (instead of ./music), GWL_MUSICTEST=<speed> (no device: decode at <speed>x real time, logs track starts/ends and decode %).
 Host: decoding is 0.3 % of play time; QEMU mipsel 12 % (emulator, not the device). Device: decode CPU, volume balance against the effects, fades: not measured.

@@ -1063,10 +1063,9 @@ static void draw_help(void) {
     d_text_c(f14, SCR_W / 2, 456, COL_DIM, 0, 255, "Left/Right  page     B  back");
 }
 
-static const char* const k_pause_rows_base[] = { "Resume", "Hints", "Sound", "Music", "Scores", "Quit to Menu" };
-#define PAUSE_ROWS 6
+enum { P_RESUME, P_HINTS, P_SOUND, P_SVOL, P_MUSIC, P_MVOL, P_SCORES, P_QUIT, PAUSE_ROWS };
 static void draw_pause(void) {
-    char hints[32], snd[32], mus[32];
+    char t[4][32];
     const char* rows[PAUSE_ROWS];
     d_target(g_screenbuf);
     d_clip(0, 0, SCR_W, SCR_H);
@@ -1074,13 +1073,16 @@ static void draw_pause(void) {
     draw_pops();
     draw_panel();
     d_rect_a(BX, BY, BSIZE, BSIZE, 0x000000, 150);
-    snprintf(hints, sizeof hints, "Show Hints: %s", g_hints ? "On" : "Off");
-    snprintf(snd, sizeof snd, "Sound Effects: %s", g_sound ? "On" : "Off");
-    snprintf(mus, sizeof mus, "Music: %s", g_music ? "On" : "Off");
-    rows[0] = k_pause_rows_base[0]; rows[1] = hints; rows[2] = snd; rows[3] = mus; rows[4] = k_pause_rows_base[4]; rows[5] = k_pause_rows_base[5];
-    panel_box(BX + 74, BY + 56, 300, PAUSE_ROWS * 40 + 70);
-    d_text_c(font_get("o36"), BX + BSIZE / 2, BY + 64, COL_GOLD, 0x000000, 255, "Paused");
-    draw_menu_rows(BX + BSIZE / 2, BY + 120, 276, 40, rows, PAUSE_ROWS, g_pause_sel);
+    snprintf(t[0], sizeof t[0], "Show Hints: %s", g_hints ? "On" : "Off");
+    snprintf(t[1], sizeof t[1], "Sound Effects: %s", g_sound ? "On" : "Off");
+    snprintf(t[2], sizeof t[2], "Effects Volume: %d%%", g_sfxvol);
+    snprintf(t[3], sizeof t[3], "Music: %s", g_music ? "On" : "Off");
+    rows[P_RESUME] = "Resume"; rows[P_HINTS] = t[0]; rows[P_SOUND] = t[1]; rows[P_SVOL] = t[2]; rows[P_MUSIC] = t[3];
+    { static char mv[32]; snprintf(mv, sizeof mv, "Music Volume: %d%%", g_musicvol); rows[P_MVOL] = mv; }
+    rows[P_SCORES] = "Scores"; rows[P_QUIT] = "Quit to Menu";
+    panel_box(BX + 74, BY + 24, 300, PAUSE_ROWS * 36 + 66);
+    d_text_c(font_get("o36"), BX + BSIZE / 2, BY + 32, COL_GOLD, 0x000000, 255, "Paused");
+    draw_menu_rows(BX + BSIZE / 2, BY + 86, 276, 36, rows, PAUSE_ROWS, g_pause_sel);
 }
 
 static void draw_confirm(void) {
@@ -1281,12 +1283,21 @@ int main(void) {
             if (press & B_UP) { g_pause_sel = (g_pause_sel + PAUSE_ROWS - 1) % PAUSE_ROWS; snd_play(SND_CLICK); }
             if (press & B_DOWN) { g_pause_sel = (g_pause_sel + 1) % PAUSE_ROWS; snd_play(SND_CLICK); }
             if (press & (B_A | B_LEFT | B_RIGHT)) {
-                if (g_pause_sel == 0 && (press & B_A)) { g_paused = 0; g_last_tick = g_now; g_screen = SC_GAME; g_click = 0; hints_arm(); }
-                else if (g_pause_sel == 1) { g_hints = !g_hints; cfg_save(); snd_play(SND_CLICK); }
-                else if (g_pause_sel == 2) { g_sound = !g_sound; apply_sound(); cfg_save(); snd_play(SND_CLICK); }
-                else if (g_pause_sel == 3) { g_music = !g_music; apply_music(); cfg_save(); snd_play(SND_CLICK); }
-                else if (g_pause_sel == 4 && (press & B_A)) { g_scores_tab = g_mode_playing; g_scores_hl = -1; g_scores_from_game = -1; g_screen = SC_SCORES; }
-                else if (g_pause_sel == 5 && (press & B_A)) { g_confirm_kind = (E.mode == MODE_ENDLESS) ? 1 : 0; g_conf_sel = 1; g_screen = SC_CONFIRM; if (g_confirm_kind == 0) g_conf_sel = 0; snd_play(SND_CLICK); }
+                int sel = g_pause_sel;
+                if (sel == P_RESUME && (press & B_A)) { g_paused = 0; g_last_tick = g_now; g_screen = SC_GAME; g_click = 0; hints_arm(); }
+                else if (sel == P_HINTS) { g_hints = !g_hints; cfg_save(); snd_play(SND_CLICK); }
+                else if (sel == P_SOUND) { g_sound = !g_sound; apply_sound(); cfg_save(); snd_play(SND_CLICK); }
+                else if (sel == P_MUSIC) { g_music = !g_music; apply_music(); cfg_save(); snd_play(SND_CLICK); }
+                else if (sel == P_SVOL || sel == P_MVOL) {                           /* 10% steps; A wraps round from 100 to 0 */
+                    int* vol = sel == P_MVOL ? &g_musicvol : &g_sfxvol;
+                    int v = *vol + ((press & B_LEFT) ? -10 : 10);
+                    if (v > 100) v = (press & B_RIGHT) ? 100 : 0;
+                    *vol = v < 0 ? 0 : v;
+                    if (sel == P_MVOL) music_set_volume(g_musicvol); else snd_set_volume(g_sfxvol);
+                    cfg_save(); snd_play(SND_CLICK);
+                }
+                else if (sel == P_SCORES && (press & B_A)) { g_scores_tab = g_mode_playing; g_scores_hl = -1; g_scores_from_game = -1; g_screen = SC_SCORES; }
+                else if (sel == P_QUIT && (press & B_A)) { g_confirm_kind = (E.mode == MODE_ENDLESS) ? 1 : 0; g_conf_sel = 1; g_screen = SC_CONFIRM; if (g_confirm_kind == 0) g_conf_sel = 0; snd_play(SND_CLICK); }
             }
             draw_pause();
             break;
