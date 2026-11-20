@@ -27,7 +27,16 @@
 
 /* ------------------------------------------------------------------ time */
 static unsigned g_now;
-static unsigned now_ms(void) { return plat_headless() ? plat_frame() * 20u : plat_ticks(); }
+static unsigned now_ms(void) {
+    static unsigned step;
+    if (!step) step = getenv("GWL_FRAME_MS") ? (unsigned)atoi(getenv("GWL_FRAME_MS")) : 20u;   /* test hook: headless frame length */
+    if (plat_headless() && getenv("GWL_JITTER")) {           /* test hook: uneven frame times, 5..GWL_JITTER ms */
+        static unsigned t, lastf = ~0u, rs = 12345;
+        if (plat_frame() != lastf) { lastf = plat_frame(); rs = rs * 1664525u + 1013904223u; t += 5 + (rs >> 16) % (unsigned)(atoi(getenv("GWL_JITTER")) - 4); }
+        return t;
+    }
+    return plat_headless() ? plat_frame() * step : plat_ticks();
+}
 
 /* ------------------------------------------------------------------ tweens */
 static float ease(int mode, float t) {
@@ -632,10 +641,32 @@ static void draw_gems_from(const GemDraw* gd, int n) {
  * opacity: most frames (waiting for a move) are then one memcpy. */
 static uint16_t g_boardcache[SCR_W * SCR_H];
 static unsigned g_cache_hash;
+static uint16_t g_boardverify[SCR_W * SCR_H];
+static unsigned g_verify_at;
+static int g_cache_heals;
+
+/* Idle board check: every cell of the logical board must hold a live gem that sits in that cell, is fully opaque and unscaled. */
+static int board_problems(int log) {
+    int cx, cy, bad = 0;
+    for (cx = 0; cx < BW; cx++) for (cy = 0; cy < BH; cy++) {
+        Gem* o = E.obj[cx][cy];
+        int ok = o && o->alive && !o->dying && o->x == cx && o->y == cy && o->type == E.board[cx][cy] &&
+                 tw_get(&o->px) == (float)(cx * TILE) && tw_get(&o->py) == (float)(cy * TILE) && tw_get(&o->sx) == 1.0f && tw_get(&o->sy) == 1.0f && tw_get(&o->op) == 255.0f;
+        if (ok) continue;
+        bad++;
+        if (log) fprintf(stderr, "gweled: CHECK frame %u: cell (%d,%d) board %d obj %p alive %d at (%d,%d) type %d drawn %.1f,%.1f scale %.2f,%.2f op %.0f\n", plat_frame(), cx, cy,
+                         E.board[cx][cy], (void*)o, o ? o->alive : -1, o ? o->x : -1, o ? o->y : -1, o ? o->type : -1,
+                         o ? tw_get(&o->px) : 0.0f, o ? tw_get(&o->py) : 0.0f, o ? tw_get(&o->sx) : 0.0f, o ? tw_get(&o->sy) : 0.0f, o ? tw_get(&o->op) : 0.0f);
+    }
+    return bad;
+}
+
 static void draw_board_cached(int dim_all) {
     GemDraw gd[MAXGEM];
     int n = gem_params(gd, dim_all), i;
     unsigned h = 2166136261u + (unsigned)dim_all;
+    static int s_check = -1;
+    if (s_check < 0) s_check = getenv("GWL_CHECK") != NULL;
     for (i = 0; i < n; i++) {
         unsigned v[6];
         int k;
@@ -649,8 +680,18 @@ static void draw_board_cached(int dim_all) {
         d_clip(0, 0, SCR_W, SCR_H);
         d_copy(g_static);
         draw_gems_from(gd, n);
-        g_cache_hash = h; g_cache_valid = 1;
+        g_cache_hash = h; g_cache_valid = 1; g_verify_at = g_now + 2000;
         d_target(g_screenbuf);
+    } else if (s_check || g_now >= g_verify_at) {
+        /* The picture has not changed for a while: prove that the cache is still what a fresh render gives, and put it right if not.
+         * (The board looked wrong on the device once: blank cells that held gems. This is the safety net and the evidence.) */
+        d_target(g_boardverify); d_clip(0, 0, SCR_W, SCR_H); d_copy(g_static); draw_gems_from(gd, n); d_target(g_screenbuf);
+        if (memcmp(g_boardverify, g_boardcache, sizeof g_boardcache)) {
+            memcpy(g_boardcache, g_boardverify, sizeof g_boardcache);
+            if (g_cache_heals++ < 20) fprintf(stderr, "gweled: CHECK frame %u: the board cache differed from a fresh render (n=%d, state %d); redrawn\n", plat_frame(), n, g_state);
+        }
+        g_verify_at = g_now + 2000;
+        if (g_state == ST_IDLE && !gems_moving() && (!s_check || plat_frame() > 90) && board_problems(0) && g_cache_heals++ < 20) { fprintf(stderr, "gweled: CHECK idle board is wrong (state %d):\n", g_state); board_problems(1); }
     }
     d_copy(g_boardcache);
 }
@@ -1141,12 +1182,22 @@ static void field_input(unsigned press) {
 }
 
 /* the self-playing bot used by the headless tests (GWL_BOT=1): picks a gem, then its partner on the next tick */
-static int g_bot, g_bot_frames, g_bot_nx = -1, g_bot_ny;
+static int g_bot, g_bot_frames, g_bot_start, g_bot_nx = -1, g_bot_ny;
 static void bot_think(void) {
     int x, y, k;
     static const int dx[4] = { -1, 1, 0, 0 }, dy[4] = { 0, 0, -1, 1 };
     if (g_state == ST_FIRST && !g_click && g_bot_nx >= 0) { g_click = 1; g_click_x = g_bot_nx; g_click_y = g_bot_ny; g_bot_nx = -1; return; }
+    if (g_state == ST_FIRST && !g_click && g_bot_nx < 0) { g_click = 1; g_click_x = g_x1; g_click_y = g_y1; return; }     /* picked another gem: put it down */
     if (g_state != ST_IDLE || g_click || !g_running) return;
+    if (g_bot > 1 && rng_range(0, 3) == 0) {                  /* GWL_BOT=2: sloppy human: illegal swaps, picking another gem, deselecting */
+        int kind = rng_range(0, 3);
+        x = rng_range(0, BW); y = rng_range(0, BH);
+        g_click = 1; g_click_x = x; g_click_y = y;
+        if (kind == 0) { g_bot_nx = x + (x < BW - 1 ? 1 : -1); g_bot_ny = y; }                 /* a neighbour, probably no match */
+        else if (kind == 1) { g_bot_nx = (x + 3) % BW; g_bot_ny = (y + 2) % BH; }              /* not a neighbour: just selects that one */
+        else { g_bot_nx = x; g_bot_ny = y; }                                                   /* the same gem: deselects */
+        return;
+    }
     if (!eng_find_move(&x, &y)) return;
     for (k = 0; k < 4; k++) {
         int nx = x + dx[k], ny = y + dy[k];
@@ -1199,8 +1250,9 @@ int main(void) {
     cfg_load(); apply_sound(); apply_music(); scores_load();
     seed = getenv("GWL_SEED") ? (unsigned)atoi(getenv("GWL_SEED")) : (unsigned)time(NULL) ^ (unsigned)plat_ticks();
     rng_seed(seed);
-    g_bot = getenv("GWL_BOT") && atoi(getenv("GWL_BOT"));
+    g_bot = getenv("GWL_BOT") ? atoi(getenv("GWL_BOT")) : 0;
     g_bot_frames = getenv("GWL_BOT_FRAMES") ? atoi(getenv("GWL_BOT_FRAMES")) : 0;
+    g_bot_start = getenv("GWL_BOT_START") ? atoi(getenv("GWL_BOT_START")) : 0;
     g_screenbuf = plat_fb();
     d_target(g_screenbuf);
     build_static();
@@ -1215,6 +1267,16 @@ int main(void) {
     for (;;) {
         unsigned held = plat_buttons(), press;
         g_now = now_ms();
+        {   /* frame time statistics, one line per 20 s of play, for the log */
+            static unsigned prev, win0, frames, worst;
+            if (prev) { unsigned d = g_now - prev; if (d > worst) worst = d; frames++; }
+            prev = g_now;
+            if (!win0) win0 = g_now;
+            if (g_now - win0 >= 20000) {
+                if (g_running && frames) fprintf(stderr, "gweled: frames %u in %u ms (avg %u ms, worst %u ms)\n", frames, g_now - win0, (g_now - win0) / frames, worst);
+                win0 = g_now; frames = 0; worst = 0;
+            }
+        }
         /* SELECT + START together leave the port from any screen: options are already on disk, then the display, the mixer
          * and SDL are shut down (plat_quit) and the process ends with 0, back to the front-end. */
         if ((held & (B_SELECT | B_START)) == (B_SELECT | B_START)) { fprintf(stderr, "gweled: SELECT+START, leaving\n"); cfg_save(); plat_quit(0); }
@@ -1263,7 +1325,8 @@ int main(void) {
             if (press & B_START) {
                 if (g_running) { g_paused = 1; g_pause_sel = 0; g_screen = SC_PAUSE; hints_off(); bounce_stop(); snd_play(SND_CLICK); break; }
             }
-            if (g_bot && (!g_bot_frames || (int)plat_frame() < g_bot_frames)) bot_think();
+            if (getenv("GWL_TRACE") && plat_frame() % 100 == 0) fprintf(stderr, "TRACE frame %u state %d click %d bot_n %d score %d moving %d\n", plat_frame(), g_state, g_click, g_bot_nx, E.score, gems_moving());
+            if (g_bot && (int)plat_frame() >= g_bot_start && (!g_bot_frames || (int)plat_frame() < g_bot_frames)) bot_think();
             field_input(press);
             /* the original board loop ran every 50 ms */
             { int n = 0; while (g_now - g_last_tick >= 50 && n < 4) { engine_tick(); g_last_tick += 50; n++; } if (n == 4) g_last_tick = g_now; }

@@ -170,8 +170,23 @@ static unsigned scripted(void) {
     return cur;
 }
 
+/* test hook GWL_FUZZ=<seed>: a random but human-ish pad (d-pad taps, A, B; never START/SELECT) */
+static unsigned fuzz(void) {
+    static unsigned cur, rs, next;
+    if (!rs) rs = (unsigned)atoi(getenv("GWL_FUZZ")) * 2654435761u + 1;
+    if (g_frame >= next) {
+        static const unsigned k[8] = { 0, 0, B_LEFT, B_RIGHT, B_UP, B_DOWN, B_A, B_B };
+        rs = rs * 1664525u + 1013904223u;
+        cur = (cur == 0) ? k[(rs >> 20) & 7] : 0;           /* press, release, press, ... */
+        if ((rs >> 12) % 9 == 0) cur = B_A;
+        next = g_frame + 2 + ((rs >> 8) % 5);
+    }
+    return cur;
+}
+
 unsigned plat_buttons(void) {
     if (g_script[0]) return scripted();
+    if (g_headless && getenv("GWL_FUZZ")) return fuzz();
 #ifdef SF3500
     return g_headless ? 0 : joykey_read();     /* joykey's order is the B_* order */
 #else
