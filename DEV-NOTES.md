@@ -46,7 +46,7 @@ QEMU: flatpak-spawn --host --directory=$PWD --env=GWL_...=... qemu-mipsel-static
 Eight Ogg Vorbis tracks made by the user (licence: CC0 1.0, decided 2026-11-20; licenses/Music-LICENCE.txt + the legal code, also copied into music/) (48 kHz stereo, 3-7 min, 41 MB), source ports/gweled/Custom/Music/{Menu,Normal,Timed,Endless}, two each.
 package.sh copies them to package/gweled/music/ with loudness.txt (assets-src/music-loudness.txt, made by tools/make_loudness.py: tracks levelled to
 the quietest, gains 0..-2.9 dB). src/music.c streams them with stb_vorbis (src/stb_vorbis.h, impl in stb_vorbis_impl.c) through plat_stream_* (plat_sdl.c:
-SF3500 = sf3500_mixer stream voice, host = SDL callback). Same design as Defense Mania's audio.cpp: file opened on a thread, random track never the one
+SF3500 = sf3500_mixer stream voice, host = SDL callback). Design: file opened on a thread, random track never the one
 that just played in that scene, next track when one ends, fade out 700 ms / in 1.6 s on a scene change. Scene = music_scene() in game.c: menu screens
 (title, settings, scores, help, name entry, after game over) = Menu; a running game incl. pause/confirm and scores/help opened from pause = its mode's folder.
 Settings rows Music On/Off + Music Volume (Left/Right 10 % steps, A +10 wrapping), pause menu has the same sound rows (toggles + both volumes, 8 rows at 36 px); cfg keys music=, musicvol= (default 1, 50), sfxvol= (default 100 = the tuned k_gain balance; snd_set_volume scales k_gain).
@@ -58,5 +58,15 @@ Host: decoding is 0.3 % of play time; QEMU mipsel 12 % (emulator, not the device
 
 ## Open
 - Not device-tested (display, pad, music decode CPU and volume balance, audio balance: snd.c k_gain = click .55, swap .85, explode .85 on peak-normalised sounds).
-- No collection entry/PR yet; source repo not created (the package carries the source tarball for the GPL).
 - Translations: the original has 30+ .po files; the UI strings are collected at the top of game.c, baked fonts cover Latin-1 only.
+
+## Device notes (SF3500, 2026-11)
+- The device's FPU (cpuinfo: "MIPS 74Kc V4.12  FPU V0.0") now and then gives a different result in some long double-precision routines (glibc's
+  sin/cos/pow ...), and Gweled's drawing once skipped a whole gem in an isolated test (22 of 123k gem drawings), then never again after a rebuild.
+  No other cause was found (not threads, context switches, FPU flags, the audio mixer, the display driver, compile flags or RAM).
+  So the game checks its own picture: after every board render the middle of each solid gem must differ from the bare tile, else the gem is drawn
+  again (up to 3 times); an idle board is re-verified against a fresh render every 2 s and blank cells are healed. Each event is logged as
+  `CHECK ... was not drawn` in log.txt; frame-time statistics are logged every 20 s of play.
+- Test hooks added later: GWL_CHECK (verify the cache every frame), GWL_FAULT (wipe a cell to test the healing), GWL_JITTER=<ms> and GWL_FRAME_MS
+  (uneven / longer headless frames), GWL_BOT=2 (a sloppy player: illegal swaps, picking and dropping gems), GWL_BOT_START, GWL_TRACE,
+  GWL_FUZZ=<seed>, GWL_MUSIC=<dir>, GWL_MUSICTEST=<speed>. `-DDRAW_DEBUG` compiles in a record of what each draw call saw (draw.c).
