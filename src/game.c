@@ -691,7 +691,7 @@ static int fix_missing_gems(uint16_t* dst, const GemDraw* gd, int n) {
     for (i = 0; i < n; i++) {
         const GemDraw* d = &gd[i];
         int px, py, bad;
-        if (d->op < 128) continue;
+        if (d->op < 128 || d->sx < 0.5f || d->sy < 0.5f) continue;          /* a gem that is shrinking away has no solid middle */
         px = (int)(BX + d->x); py = (int)(BY + d->y);
         if (px < BX + 4 || px >= BX + BSIZE - 4 || py < BY + 4 || py >= BY + BSIZE - 4) continue;
         bad = dst[(size_t)py * SCR_W + px] == g_static[(size_t)py * SCR_W + px];
