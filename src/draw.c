@@ -4,6 +4,14 @@
 #include <string.h>
 #include <stdio.h>
 
+#ifdef DRAW_DEBUG
+/* Test hook (drawtest): what the last d_img_s / d_img call saw and did, to find out why a gem is now and then not drawn on the device. */
+typedef struct { int stage, w, h, opacity, dw, dh, x0, y0, cx0, cy0, cx1, cy1, x, y, cw, ch, sx0, sy0, fast, rows, a0_first, a1_first, o0_first, o1_first; float cxf, cyf, sxf, syf; } DbgRec;
+DbgRec g_dbg;
+#define DBG(f, v) (g_dbg.f = (v))
+#else
+#define DBG(f, v) ((void)0)
+#endif
 static uint16_t* g_buf;
 static int cx0 = 0, cy0 = 0, cx1 = SCR_W, cy1 = SCR_H;
 
@@ -111,10 +119,13 @@ void img_prepare(Img* im) {
 
 void d_img(const Img* im, int x, int y, int opacity) {
     int sx0 = 0, sy0 = 0, w = im->w, h = im->h, i, j;
-    if (opacity <= 0) return;
+    DBG(stage, 10); DBG(w, im->w); DBG(h, im->h); DBG(opacity, opacity); DBG(x, x); DBG(y, y); DBG(rows, 0);
+    DBG(cx0, cx0); DBG(cy0, cy0); DBG(cx1, cx1); DBG(cy1, cy1); DBG(fast, im->c565 != NULL);
+    if (opacity <= 0) { DBG(stage, 11); return; }
     if (x < cx0) { sx0 = cx0 - x; } if (y < cy0) { sy0 = cy0 - y; }
     if (x + w > cx1) w = cx1 - x;
     if (y + h > cy1) h = cy1 - y;
+    DBG(cw, w); DBG(ch, h); DBG(sx0, sx0); DBG(sy0, sy0);
     if (im->c565) {
         for (j = sy0; j < h; j++) {
             int a0 = im->span[j * 4], a1 = im->span[j * 4 + 1], o0 = im->span[j * 4 + 2], o1 = im->span[j * 4 + 3];
@@ -123,6 +134,10 @@ void d_img(const Img* im, int x, int y, int opacity) {
             uint16_t* d = g_buf + (size_t)(y + j) * SCR_W + x;
             if (a0 < sx0) a0 = sx0;
             if (a1 > w) a1 = w;
+#ifdef DRAW_DEBUG
+            if (g_dbg.rows == 0) { g_dbg.a0_first = a0; g_dbg.a1_first = a1; g_dbg.o0_first = o0; g_dbg.o1_first = o1; }
+            g_dbg.rows++;
+#endif
             if (opacity >= 255) {
                 if (o0 < a0 || o1 > a1 || o1 <= o0) { o0 = o1 = a0; }       /* clipped or no opaque run: per-pixel only */
                 for (i = a0; i < o0; i++) {
@@ -161,9 +176,12 @@ void d_img(const Img* im, int x, int y, int opacity) {
 void d_img_s(const Img* im, float cx, float cy, float sx, float sy, int opacity) {
     int dw = (int)(im->w * sx + 0.5f), dh = (int)(im->h * sy + 0.5f), x0, y0, i, j;
     int fx, fy;
-    if (dw <= 0 || dh <= 0 || opacity <= 0) return;
+    DBG(stage, 1); DBG(w, im->w); DBG(h, im->h); DBG(cxf, cx); DBG(cyf, cy); DBG(sxf, sx); DBG(syf, sy); DBG(opacity, opacity); DBG(dw, dw); DBG(dh, dh); DBG(rows, -1);
+    if (dw <= 0 || dh <= 0 || opacity <= 0) { DBG(stage, 2); return; }
     x0 = (int)(cx - dw * 0.5f + 0.5f); y0 = (int)(cy - dh * 0.5f + 0.5f);
-    if (dw == im->w && dh == im->h) { d_img(im, x0, y0, opacity); return; }
+    DBG(x0, x0); DBG(y0, y0);
+    if (dw == im->w && dh == im->h) { DBG(stage, 3); d_img(im, x0, y0, opacity); return; }
+    DBG(stage, 4);
     fx = (int)((float)im->w * 65536.0f / (float)dw); fy = (int)((float)im->h * 65536.0f / (float)dh);
     for (j = 0; j < dh; j++) {
         int dy = y0 + j, v, vy, vf;
