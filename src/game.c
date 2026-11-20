@@ -642,7 +642,7 @@ static void draw_gems_from(const GemDraw* gd, int n) {
 static uint16_t g_boardcache[SCR_W * SCR_H];
 static unsigned g_cache_hash;
 static uint16_t g_boardverify[SCR_W * SCR_H];
-static unsigned g_verify_at;
+static unsigned g_verify_at, g_blank_at;
 static int g_cache_heals;
 
 /* Idle board check: every cell of the logical board must hold a live gem that sits in that cell, is fully opaque and unscaled. */
@@ -661,9 +661,62 @@ static int board_problems(int log) {
     return bad;
 }
 
+/* Cells of a rendered board that show the bare background tile (an idle board has a gem in every cell, so none may). Bit n = cell n. */
+static unsigned long long blank_cells(const uint16_t* buf) {
+    unsigned long long m = 0;
+    int cx, cy, r;
+    for (cx = 0; cx < BW; cx++) for (cy = 0; cy < BH; cy++) {
+        int same = 1;
+        for (r = 0; r < TILE && same; r++) {
+            size_t o = (size_t)(BY + cy * TILE + r) * SCR_W + BX + cx * TILE;
+            if (memcmp(buf + o, g_static + o, TILE * 2)) same = 0;
+        }
+        if (same) m |= 1ULL << (cy * BW + cx);
+    }
+    return m;
+}
+
+static void render_board(uint16_t* dst, const GemDraw* gd, int n) {
+    d_target(dst); d_clip(0, 0, SCR_W, SCR_H); d_copy(g_static); draw_gems_from(gd, n); d_target(g_screenbuf);
+}
+
+static unsigned sum_words(const void* p, size_t bytes) { const unsigned* w = (const unsigned*)p; unsigned a = 0; size_t i; for (i = 0; i < bytes / 4; i++) a = a * 31u + w[i]; return a; }
+static unsigned data_sum(void) {          /* the static background and the gem pictures: they must never change */
+    unsigned a = sum_words(g_static, sizeof g_static), i;
+    for (i = 0; i < 7; i++) a = a * 31u + sum_words(g_gemimg[i].c565, (size_t)g_gemimg[i].w * g_gemimg[i].h * 2) + sum_words(g_gemimg[i].a8, (size_t)g_gemimg[i].w * g_gemimg[i].h / 4 * 4);
+    return a;
+}
+static unsigned g_data_sum;
+
+static void describe_cells(const char* what, unsigned long long m) {
+    char b[400]; int i, n = 0;
+    for (i = 0; i < BW * BH && n < (int)sizeof b - 12; i++) if (m >> i & 1) n += snprintf(b + n, sizeof b - (size_t)n, " (%d,%d)", i % BW, i / BW);
+    fprintf(stderr, "gweled: CHECK frame %u: %s:%s\n", plat_frame(), what, b);
+}
+
+/* The board looked wrong on the device: gems that vanish for a while from their cells while the board is idle. Whatever the cause, an idle
+ * board has a gem in every cell, so a cell showing the bare tile is wrong: draw the board again until none does, and say so in the log. */
+static void heal_blank_cells(const GemDraw* gd, int n, unsigned long long blank) {
+    int attempt;
+    unsigned long long m = blank;
+    if (g_cache_heals < 30) {
+        unsigned now_sum = data_sum();
+        describe_cells("blank cells in the board picture", blank);
+        fprintf(stderr, "gweled: CHECK   background+gem pictures %s (sum %08x, was %08x)\n", now_sum == g_data_sum ? "unchanged" : "CHANGED", now_sum, g_data_sum);
+    }
+    g_cache_heals++;
+    for (attempt = 0; attempt < 4 && m; attempt++) {
+        render_board(g_boardverify, gd, n);
+        m = blank_cells(g_boardverify);
+        if (g_cache_heals <= 30) fprintf(stderr, "gweled: CHECK   fresh render %d: %s\n", attempt + 1, m ? "still has blank cells" : "complete");
+        if (!m) break;
+    }
+    if (!m) memcpy(g_boardcache, g_boardverify, sizeof g_boardcache);
+}
+
 static void draw_board_cached(int dim_all) {
     GemDraw gd[MAXGEM];
-    int n = gem_params(gd, dim_all), i;
+    int n = gem_params(gd, dim_all), i, idle;
     unsigned h = 2166136261u + (unsigned)dim_all;
     static int s_check = -1;
     if (s_check < 0) s_check = getenv("GWL_CHECK") != NULL;
@@ -675,23 +728,34 @@ static void draw_board_cached(int dim_all) {
         for (k = 0; k < 6; k++) h = (h ^ v[k]) * 16777619u;
     }
     h ^= (unsigned)n << 20;
+    idle = g_state == ST_IDLE && !gems_moving() && !dim_all && g_running && n == BW * BH && (!s_check || plat_frame() > 90);
+    if (!g_data_sum) g_data_sum = data_sum();
     if (!g_cache_valid || h != g_cache_hash) {
-        d_target(g_boardcache);
-        d_clip(0, 0, SCR_W, SCR_H);
-        d_copy(g_static);
-        draw_gems_from(gd, n);
-        g_cache_hash = h; g_cache_valid = 1; g_verify_at = g_now + 2000;
-        d_target(g_screenbuf);
-    } else if (s_check || g_now >= g_verify_at) {
-        /* The picture has not changed for a while: prove that the cache is still what a fresh render gives, and put it right if not.
-         * (The board looked wrong on the device once: blank cells that held gems. This is the safety net and the evidence.) */
-        d_target(g_boardverify); d_clip(0, 0, SCR_W, SCR_H); d_copy(g_static); draw_gems_from(gd, n); d_target(g_screenbuf);
-        if (memcmp(g_boardverify, g_boardcache, sizeof g_boardcache)) {
-            memcpy(g_boardcache, g_boardverify, sizeof g_boardcache);
-            if (g_cache_heals++ < 20) fprintf(stderr, "gweled: CHECK frame %u: the board cache differed from a fresh render (n=%d, state %d); redrawn\n", plat_frame(), n, g_state);
-        }
+        render_board(g_boardcache, gd, n);
+        g_cache_hash = h; g_cache_valid = 1; g_verify_at = g_now + 2000; g_blank_at = g_now + 120;
+    } else if (idle && g_now >= g_blank_at) {                    /* a few times a second: any blank cell in the picture? */
+        unsigned long long m = blank_cells(g_boardcache);
+        g_blank_at = g_now + 120;
+        if (m) heal_blank_cells(gd, n, m);
+    }
+    if (s_check && getenv("GWL_FAULT") && idle && plat_frame() % 300 == 0) {        /* test hook: wipe one cell of the picture, as the device did */
+        int cx = (int)(plat_frame() / 300) % BW, cy = (int)(plat_frame() / 600) % BH, r;
+        for (r = 0; r < TILE; r++) { size_t o = (size_t)(BY + cy * TILE + r) * SCR_W + BX + cx * TILE; memcpy(g_boardcache + o, g_static + o, TILE * 2); }
+    }
+    if (idle && (s_check || g_now >= g_verify_at)) {
+        /* The picture has not changed for a while: it must still be what a fresh render gives. */
+        render_board(g_boardverify, gd, n);
         g_verify_at = g_now + 2000;
-        if (g_state == ST_IDLE && !gems_moving() && (!s_check || plat_frame() > 90) && board_problems(0) && g_cache_heals++ < 20) { fprintf(stderr, "gweled: CHECK idle board is wrong (state %d):\n", g_state); board_problems(1); }
+        if (memcmp(g_boardverify, g_boardcache, sizeof g_boardcache)) {
+            unsigned long long mc = blank_cells(g_boardcache), mf = blank_cells(g_boardverify);
+            if (g_cache_heals++ < 30) {
+                fprintf(stderr, "gweled: CHECK frame %u: the board picture differs from a fresh render (state %d)\n", plat_frame(), g_state);
+                if (mc) describe_cells("  blank in the picture", mc);
+                if (mf) describe_cells("  blank in the fresh render", mf);
+            }
+            if (!mf) memcpy(g_boardcache, g_boardverify, sizeof g_boardcache);
+        }
+        if (board_problems(0) && g_cache_heals++ < 30) { fprintf(stderr, "gweled: CHECK idle board is wrong (state %d):\n", g_state); board_problems(1); }
     }
     d_copy(g_boardcache);
 }
