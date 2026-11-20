@@ -1,0 +1,11 @@
+Gweled
+  Original game (c) 2003-2005 Sebastien Delestaing <sebdelestaing@free.fr>
+  (c) 2010-2026 Daniele Napolitano <dnax88@gmail.com>
+  Also credited in the project's About dialog: Wesley Ellis; Crunchpix (explode sound).
+  https://gweled.org   GPL-2.0-or-later
+
+Gweled for the SF3500 (SDL2 front end, handheld packaging)
+  (c) 2026 AthruZ (Kryptikone316)   GPL-2.0-or-later
+
+DejaVu Sans Bold (glyphs rasterised into the game)
+  (c) Bitstream, Inc.; DejaVu changes are public domain. See DejaVu-fonts-LICENSE.txt.
