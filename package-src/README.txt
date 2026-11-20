@@ -32,7 +32,8 @@ MENUS
   Game       Continue Saved Game (when there is one), Normal, Timed, Endless
   Settings   Sound Effects on/off, Show Hints on/off
   Scores     the best ten of the Normal and Timed games (Endless has none);
-             X on that screen clears them all, after a Yes/No question
+             X on that screen clears the list you are looking at
+             (Normal or Timed, each on its own), after a Yes/No question
   Help       how to play, controls, game types, scoring and levels, about
   Exit Game  leave Gweled and return to the front-end
 After 15 seconds without a move a possible move bounces; turn hints off in
