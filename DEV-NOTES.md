@@ -18,14 +18,14 @@ Box art: package-src/boxart.png = 500x500 of ports/gweled/screenshot.png (the us
 - src/game.c       animation (tweens + Clutter easings), the 50 ms board state machine (port of board_engine_loop), screens, files.
 - src/draw.c       RGB565 drawing, RGBA sprites (img_prepare makes fast planes), bilinear scaled blit, baked DejaVu text with outline.
 - src/snd.c, pak.c, plat_sdl.c (+plat/ = SF3500 hwdisp/joykey/mixer, copied from the other ports).
-Files in the port folder: gweled.cfg (sound, hints, name), gweled.scores (top 10 normal + timed), gweled.sav (one saved game).
+Files in the port folder: gweled.cfg (sound, music, musicvol, hints, name), gweled.scores (top 10 normal + timed), gweled.sav (one saved game).
 
 ## Behaviour notes (faithful to the original unless stated)
 - Timings: swap 200 ms in-out-cubic, fall 100+20*maxrow ms out-cubic with 25 ms/gem delay, pop 80 ms to 1.2x then 150 ms to 0,
   score popup bounce-in 500 ms / float up TILE/3 over 800 ms / fade at 700-800 ms, blink 200 ms period halves, hint bounce 350+150 ms
   for 2 s, hint after 15 s idle. Level bar uses the original thresholds (100, 200, 400...); bonus = 8 random single gems (10 pts).
 - Timed mode: every 1.25 s (25 board ticks) the bar drains by steps_for_timer; level-up resets it to the middle.
-- Menus (2026-11-19): Game (Continue Saved Game if any, Normal, Timed, Endless), Settings (Sound Effects, Show Hints), Scores (tabs Normal/Timed/Endless; Endless
+- Menus (2026-11-19): Game (Continue Saved Game if any, Normal, Timed, Endless), Settings (Sound Effects, Music, Music Volume, Show Hints), Scores (tabs Normal/Timed/Endless; Endless
   shows 'not scored'), Help (5 pages: How to Play, Controls, Game Types, Scoring and Levels, About), Exit Game. B goes back one level.
   SELECT+START at any moment: cfg_save() + plat_quit(0) (display, mixer, SDL shut down, exit code 0) - an unsaved game in progress is NOT saved.
   Test hooks added: GWL_HELP=<page>, GWL_MSG=<text>, GWL_OSKTEST=<score>. Text-fit check: worst-case names/scores/messages were screenshotted.
@@ -42,9 +42,21 @@ Bot run seed 11 Normal: level 2 at frame 1443 score 340, level 3 at 2688 score 1
 QEMU mipsel (frames differ by at most 1 level per channel).
 QEMU: flatpak-spawn --host --directory=$PWD --env=GWL_...=... qemu-mipsel-static -L <buildroot sysroot> build-sf3500/gweled.stripped.mipsel
 
+## Music (2026-11-19)
+Eight Ogg Vorbis tracks made by the user (48 kHz stereo, 3-7 min, 41 MB), source ports/gweled/Custom/Music/{Menu,Normal,Timed,Endless}, two each.
+package.sh copies them to package/gweled/music/ with loudness.txt (assets-src/music-loudness.txt, made by tools/make_loudness.py: tracks levelled to
+the quietest, gains 0..-2.9 dB). src/music.c streams them with stb_vorbis (src/stb_vorbis.h, impl in stb_vorbis_impl.c) through plat_stream_* (plat_sdl.c:
+SF3500 = sf3500_mixer stream voice, host = SDL callback). Same design as Defense Mania's audio.cpp: file opened on a thread, random track never the one
+that just played in that scene, next track when one ends, fade out 700 ms / in 1.6 s on a scene change. Scene = music_scene() in game.c: menu screens
+(title, settings, scores, help, name entry, after game over) = Menu; a running game incl. pause/confirm and scores/help opened from pause = its mode's folder.
+Settings rows Music On/Off + Music Volume (Left/Right 10 % steps, A +10 wrapping), pause menu has Music toggle; cfg keys music=, musicvol= (default 1, 50).
+Music off or volume 0 stops the stream and decoder completely. A missing music folder = silence, no error. Own tracks can be dropped into the folders.
+Test hooks: GWL_MUSIC=<dir> (instead of ./music), GWL_MUSICTEST=<speed> (no device: decode at <speed>x real time, logs track starts/ends and decode %).
+Host: decoding is 0.3 % of play time; QEMU mipsel 12 % (emulator, not the device). Device: decode CPU, volume balance against the effects, fades: not measured.
+
 ## Perf (host x86): ~0.43 ms/frame while gems are animating, ~0.05 ms when idle (board is cached; panel fixed parts baked). Device not measured.
 
 ## Open
-- Not device-tested (display, pad, audio balance: snd.c k_gain = click .55, swap .85, explode .85 on peak-normalised sounds).
+- Not device-tested (display, pad, music decode CPU and volume balance, audio balance: snd.c k_gain = click .55, swap .85, explode .85 on peak-normalised sounds).
 - No collection entry/PR yet; source repo not created (the package carries the source tarball for the GPL).
 - Translations: the original has 30+ .po files; the UI strings are collected at the top of game.c, baked fonts cover Latin-1 only.

@@ -4,5 +4,5 @@
 set -e
 cd "$(dirname "$0")"
 mkdir -p build-host
-gcc -O2 -g -Wall -Wextra -Wno-unused-result -Wno-unused-parameter -Isrc $(sdl2-config --cflags) src/*.c -o build-host/gweled $(sdl2-config --libs) -lm
+gcc -O2 -g -Wall -Wextra -Wno-unused-result -Wno-unused-parameter -Isrc $(sdl2-config --cflags) src/*.c -o build-host/gweled $(sdl2-config --libs) -lm -lpthread
 echo built build-host/gweled

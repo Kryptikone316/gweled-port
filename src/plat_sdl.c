@@ -33,6 +33,10 @@ static SDL_Surface* g_surf;
 #ifdef SF3500
 static Sf3500Voice* g_voice[NSND];
 static int g_mixer_ok;
+static Sf3500Voice* g_stream;
+static PlatFill g_stream_fill;
+static void* g_stream_ud;
+static int stream_pull(void* ud, short* dst, int frames) { (void)ud; return g_stream_fill(g_stream_ud, dst, frames); }
 #else
 static SDL_Window* g_win;
 static SDL_Renderer* g_ren;
@@ -41,6 +45,7 @@ static SDL_AudioDeviceID g_adev;
 typedef struct { const short* pcm; int frames; volatile int pos; volatile float gain; volatile int on; } HVoice;
 static HVoice g_hv[NSND];
 static unsigned g_keys_held;
+static struct { PlatFill fill; void* ud; volatile int on; volatile float gain; } g_hstream;
 #endif
 
 uint16_t* plat_fb(void) { return g_fb; }
@@ -64,6 +69,19 @@ static void audio_cb(void* ud, Uint8* stream, int len) {
             out[i * 2 + 1] = (short)(r > 32767 ? 32767 : (r < -32768 ? -32768 : r));
         }
         if (h->pos >= h->frames) h->on = 0;
+    }
+    if (g_hstream.on && g_hstream.fill) {            /* the music (48 kHz stereo here; the device mixer resamples other rates) */
+        short tmp[2048 * 2];
+        int done = 0;
+        while (done < n) {
+            int want = n - done > 2048 ? 2048 : n - done, got = g_hstream.fill(g_hstream.ud, tmp, want);
+            for (i = 0; i < got * 2; i++) {
+                int m = out[done * 2 + i] + (int)(tmp[i] * g_hstream.gain);
+                out[done * 2 + i] = (short)(m > 32767 ? 32767 : (m < -32768 ? -32768 : m));
+            }
+            done += got;
+            if (got < want) { g_hstream.on = 0; break; }
+        }
     }
 }
 #endif
@@ -209,6 +227,62 @@ void plat_snd_play(int id, float gain) {
     sf3500_voice_play(g_voice[id]);
 #else
     g_hv[id].gain = gain; g_hv[id].pos = 0; g_hv[id].on = 1;
+#endif
+}
+
+int plat_stream_ok(void) {
+#ifdef SF3500
+    return g_mixer_ok;
+#else
+    return g_adev != 0;
+#endif
+}
+
+int plat_stream_start(PlatFill fill, void* ud, int rate, float gain) {
+    plat_stream_stop();
+#ifdef SF3500
+    if (!g_mixer_ok) return 0;
+    g_stream_fill = fill; g_stream_ud = ud;
+    g_stream = sf3500_voice_create_stream(stream_pull, NULL, rate, 2);
+    if (!g_stream) return 0;
+    sf3500_voice_set_relative(g_stream, true);
+    sf3500_voice_set_looping(g_stream, false);
+    sf3500_voice_set_gain(g_stream, gain);
+    sf3500_voice_play(g_stream);
+    return 1;
+#else
+    (void)rate;
+    if (!g_adev) return 0;
+    SDL_LockAudioDevice(g_adev);
+    g_hstream.fill = fill; g_hstream.ud = ud; g_hstream.gain = gain; g_hstream.on = 1;
+    SDL_UnlockAudioDevice(g_adev);
+    return 1;
+#endif
+}
+
+void plat_stream_gain(float gain) {
+#ifdef SF3500
+    if (g_stream) sf3500_voice_set_gain(g_stream, gain);
+#else
+    g_hstream.gain = gain;
+#endif
+}
+
+int plat_stream_playing(void) {
+#ifdef SF3500
+    return g_stream && sf3500_voice_playing(g_stream);
+#else
+    return g_hstream.on;
+#endif
+}
+
+void plat_stream_stop(void) {
+#ifdef SF3500
+    if (g_stream) { sf3500_voice_destroy(g_stream); g_stream = NULL; }
+#else
+    if (g_adev) SDL_LockAudioDevice(g_adev);
+    g_hstream.on = 0; g_hstream.fill = NULL;
+    if (g_adev) SDL_UnlockAudioDevice(g_adev);
 #endif
 }
 

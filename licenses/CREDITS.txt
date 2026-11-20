@@ -7,5 +7,9 @@ Gweled
 Gweled for the SF3500 (SDL2 front end, handheld packaging)
   (c) 2026 AthruZ (Kryptikone316)   GPL-2.0-or-later
 
+Music (music/, eight tracks) and stb_vorbis
+  Music made for this port by AthruZ (Kryptikone316).
+  stb_vorbis Ogg Vorbis decoder: Sean Barrett, public domain / MIT (src/stb_vorbis.h).
+
 DejaVu Sans Bold (glyphs rasterised into the game)
   (c) Bitstream, Inc.; DejaVu changes are public domain. See DejaVu-fonts-LICENSE.txt.

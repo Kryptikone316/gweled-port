@@ -29,6 +29,15 @@ unsigned plat_frame(void);           /* frames presented so far */
 void plat_snd_set(int id, const short* pcm, int frames);
 void plat_snd_play(int id, float gain);
 
+/* One music stream. fill() writes up to `frames` interleaved stereo S16 frames at `rate` Hz into dst and returns how many it
+ * wrote; fewer than asked means the end of the track. It is called from the audio thread. */
+typedef int (*PlatFill)(void* ud, short* dst, int frames);
+int plat_stream_ok(void);                                              /* there is an audio output to play on */
+int plat_stream_start(PlatFill fill, void* ud, int rate, float gain);  /* 1 = playing */
+void plat_stream_gain(float gain);
+int plat_stream_playing(void);
+void plat_stream_stop(void);         /* after it returns, fill() is not running and will not be called again */
+
 void plat_quit(int code) __attribute__((noreturn));
 
 #endif

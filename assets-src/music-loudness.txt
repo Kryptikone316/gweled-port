@@ -1,0 +1,9 @@
+# gain in dB per track, made by tools/make_loudness.py; the quietest track is the reference
+Endless/01 - Endless - Rising Tension.ogg = -2.9
+Endless/02 - Endless - Pounding Development.ogg = -0.7
+Menu/01 - Menu - Subtly Shifting.ogg = 0.0
+Menu/02 - Menu - Spacious.ogg = -1.2
+Normal/01 - Normal - Restrained Shimmering.ogg = -1.2
+Normal/02 - Normal - Delicate Evolution.ogg = -0.8
+Timed/01 - Timed - Brisk Ticks.ogg = -1.9
+Timed/02 - Timed - Hypnotic Restraint.ogg = -1.4

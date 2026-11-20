@@ -9,6 +9,7 @@
 #include "plat.h"
 #include "pak.h"
 #include "snd.h"
+#include "music.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -201,7 +202,7 @@ static Gem* g_hint_gem;
 static int g_game_over_reported;
 
 /* options saved to gweled.cfg */
-static int g_sound = 1, g_hints = 1;
+static int g_sound = 1, g_hints = 1, g_music = 1, g_musicvol = 50;
 static char g_name[16] = "Player";
 
 static void clear_cursors(void) { int i; for (i = 0; i < 4; i++) g_cur[i].used = 0; g_cursor0 = -1; }
@@ -401,6 +402,8 @@ static void cfg_load(void) {
         int v;
         if (sscanf(line, "sound=%d", &v) == 1) g_sound = v != 0;
         else if (sscanf(line, "hints=%d", &v) == 1) g_hints = v != 0;
+        else if (sscanf(line, "music=%d", &v) == 1) g_music = v != 0;
+        else if (sscanf(line, "musicvol=%d", &v) == 1) g_musicvol = v < 0 ? 0 : v > 100 ? 100 : v / 10 * 10;
         else if (!strncmp(line, "name=", 5)) {
             size_t n;
             snprintf(g_name, sizeof g_name, "%.12s", line + 5);
@@ -414,7 +417,7 @@ static void cfg_load(void) {
 static void cfg_save(void) {
     FILE* f = fopen(CFG_FILE, "w");
     if (!f) return;
-    fprintf(f, "sound=%d\nhints=%d\nname=%s\n", g_sound, g_hints, g_name);
+    fprintf(f, "sound=%d\nmusic=%d\nmusicvol=%d\nhints=%d\nname=%s\n", g_sound, g_music, g_musicvol, g_hints, g_name);
     fclose(f);
 }
 
@@ -837,13 +840,13 @@ static void osk_draw(int score) {
 /* ---- screens: title ---- */
 
 typedef struct { const char* label; int id; } Row;
-enum { R_CONTINUE = 1, R_NORMAL, R_TIMED, R_ENDLESS, R_SOUND, R_HINTS, R_GAME, R_SETTINGS, R_SCORES, R_HELP, R_EXIT };
+enum { R_CONTINUE = 1, R_NORMAL, R_TIMED, R_ENDLESS, R_SOUND, R_HINTS, R_MUSIC, R_MVOL, R_GAME, R_SETTINGS, R_SCORES, R_HELP, R_EXIT };
 static Row g_rows[12];
-static char g_rowtxt[3][32];
+static char g_rowtxt[4][32];
 static int g_nrows;
 
 /* Main menu: Game, Settings, Scores, Help, Exit Game.  Game: [Continue Saved Game], Normal, Timed, Endless.
- * Settings: Sound Effects, Show Hints. */
+ * Settings: Sound Effects, Music, Music Volume, Show Hints. */
 static void build_title_rows(void) {
     g_nrows = 0;
     if (g_menu == 1) {
@@ -854,7 +857,11 @@ static void build_title_rows(void) {
     } else if (g_menu == 2) {
         snprintf(g_rowtxt[0], sizeof g_rowtxt[0], "Sound Effects: %s", g_sound ? "On" : "Off");
         snprintf(g_rowtxt[1], sizeof g_rowtxt[1], "Show Hints: %s", g_hints ? "On" : "Off");
+        snprintf(g_rowtxt[2], sizeof g_rowtxt[2], "Music: %s", g_music ? "On" : "Off");
+        snprintf(g_rowtxt[3], sizeof g_rowtxt[3], "Music Volume: %d%%", g_musicvol);
         g_rows[g_nrows++] = (Row){ g_rowtxt[0], R_SOUND };
+        g_rows[g_nrows++] = (Row){ g_rowtxt[2], R_MUSIC };
+        g_rows[g_nrows++] = (Row){ g_rowtxt[3], R_MVOL };
         g_rows[g_nrows++] = (Row){ g_rowtxt[1], R_HINTS };
     } else {
         g_rows[g_nrows++] = (Row){ "Game", R_GAME };
@@ -891,7 +898,7 @@ static void wrap_text(const Font* f, int cx, int y, int maxw, uint32_t col, cons
 static const char* row_description(int id) {
     switch (id) {
     case R_GAME: return "Start a new game or pick up a saved one.";
-    case R_SETTINGS: return "Sound effects and hints.";
+    case R_SETTINGS: return "Sound effects, music and hints.";
     case R_SCORES: return "The best scores of each game type.";
     case R_HELP: return "How to play, the controls and the game types.";
     case R_EXIT: return "Leave Gweled and go back to the menu.";
@@ -900,6 +907,8 @@ static const char* row_description(int id) {
     case R_TIMED: return S_DESC_TIMED;
     case R_ENDLESS: return S_DESC_ENDLESS;
     case R_SOUND: return "Turn the sound effects on or off.";
+    case R_MUSIC: return "Turn the background music on or off.";
+    case R_MVOL: return "Left and Right change how loud the music is.";
     case R_HINTS: return "Show a possible move after 15 seconds without one.";
     default: return "";
     }
@@ -1038,7 +1047,7 @@ static void draw_help(void) {
         d_text_c(f14, SCR_W / 2, y, COL_TEXT, 0, 255, "Original game by Sebastien Delestaing and Daniele Napolitano"); y += 22;
         d_text_c(f14, SCR_W / 2, y, COL_TEXT, 0, 255, "With Wesley Ellis    Explode sound by Crunchpix"); y += 22;
         d_text_c(f14, SCR_W / 2, y, COL_TEXT, 0, 255, "gweled.org"); y += 34;
-        d_text_c(f14, SCR_W / 2, y, COL_TEXT, 0, 255, "SF3500 version by AthruZ (Kryptikone316)"); y += 34;
+        d_text_c(f14, SCR_W / 2, y, COL_TEXT, 0, 255, "SF3500 version and music by AthruZ (Kryptikone316)"); y += 34;
         d_text_c(f14, SCR_W / 2, y, COL_DIM, 0, 255, "GNU General Public License, version 2 or later."); y += 22;
         d_text_c(f14, SCR_W / 2, y, COL_DIM, 0, 255, "Text set in DejaVu Sans Bold (free licence)."); y += 34;
         break;
@@ -1050,10 +1059,11 @@ static void draw_help(void) {
     d_text_c(f14, SCR_W / 2, 456, COL_DIM, 0, 255, "Left/Right  page     B  back");
 }
 
-static const char* const k_pause_rows_base[] = { "Resume", "Hints", "Sound", "Scores", "Quit to Menu" };
+static const char* const k_pause_rows_base[] = { "Resume", "Hints", "Sound", "Music", "Scores", "Quit to Menu" };
+#define PAUSE_ROWS 6
 static void draw_pause(void) {
-    char hints[32], snd[32];
-    const char* rows[5];
+    char hints[32], snd[32], mus[32];
+    const char* rows[PAUSE_ROWS];
     d_target(g_screenbuf);
     d_clip(0, 0, SCR_W, SCR_H);
     d_copy(g_static);
@@ -1062,10 +1072,11 @@ static void draw_pause(void) {
     d_rect_a(BX, BY, BSIZE, BSIZE, 0x000000, 150);
     snprintf(hints, sizeof hints, "Show Hints: %s", g_hints ? "On" : "Off");
     snprintf(snd, sizeof snd, "Sound Effects: %s", g_sound ? "On" : "Off");
-    rows[0] = k_pause_rows_base[0]; rows[1] = hints; rows[2] = snd; rows[3] = k_pause_rows_base[3]; rows[4] = k_pause_rows_base[4];
-    panel_box(BX + 74, BY + 70, 300, 5 * 40 + 70);
-    d_text_c(font_get("o36"), BX + BSIZE / 2, BY + 78, COL_GOLD, 0x000000, 255, "Paused");
-    draw_menu_rows(BX + BSIZE / 2, BY + 134, 276, 40, rows, 5, g_pause_sel);
+    snprintf(mus, sizeof mus, "Music: %s", g_music ? "On" : "Off");
+    rows[0] = k_pause_rows_base[0]; rows[1] = hints; rows[2] = snd; rows[3] = mus; rows[4] = k_pause_rows_base[4]; rows[5] = k_pause_rows_base[5];
+    panel_box(BX + 74, BY + 56, 300, PAUSE_ROWS * 40 + 70);
+    d_text_c(font_get("o36"), BX + BSIZE / 2, BY + 64, COL_GOLD, 0x000000, 255, "Paused");
+    draw_menu_rows(BX + BSIZE / 2, BY + 120, 276, 40, rows, PAUSE_ROWS, g_pause_sel);
 }
 
 static void draw_confirm(void) {
@@ -1083,6 +1094,7 @@ static void draw_confirm(void) {
 
 /* ---- audio / settings glue ---- */
 static void apply_sound(void) { snd_enable(g_sound); }
+static void apply_music(void) { music_set_volume(g_musicvol); music_set_enabled(g_music); }
 
 /* ---- input with repeat ---- */
 static unsigned g_prev_btn, g_rep_until[4];
@@ -1159,6 +1171,14 @@ static void finish_game_to_scores(void) {
     else leave_to_title();
 }
 
+/* Which music fits what is on screen: the menu screens get the menu music, a game in progress (also while paused, or looking at
+ * the scores or help from the pause menu) gets its game type's music. After a game is over the name entry and scores are menu again. */
+static int music_scene(void) {
+    int in_game = g_screen == SC_GAME || g_screen == SC_PAUSE || g_screen == SC_CONFIRM ||
+                  ((g_screen == SC_SCORES || g_screen == SC_HELP || g_screen == SC_RESET) && (g_running || g_paused) && !g_over_dim);
+    return in_game ? MS_NORMAL + (E.mode >= 0 && E.mode <= 2 ? E.mode : 0) : MS_MENU;
+}
+
 int main(void) {
     int i;
     unsigned seed;
@@ -1169,7 +1189,8 @@ int main(void) {
     for (i = 0; i < 7; i++) { img_prepare(&g_gemimg[i]); img_prepare(&g_gemzoom[i]); }
     img_prepare(&g_cursor_img);
     snd_init();
-    cfg_load(); apply_sound(); scores_load();
+    music_init();
+    cfg_load(); apply_sound(); apply_music(); scores_load();
     seed = getenv("GWL_SEED") ? (unsigned)atoi(getenv("GWL_SEED")) : (unsigned)time(NULL) ^ (unsigned)plat_ticks();
     rng_seed(seed);
     g_bot = getenv("GWL_BOT") && atoi(getenv("GWL_BOT"));
@@ -1192,6 +1213,8 @@ int main(void) {
          * and SDL are shut down (plat_quit) and the process ends with 0, back to the front-end. */
         if ((held & (B_SELECT | B_START)) == (B_SELECT | B_START)) { fprintf(stderr, "gweled: SELECT+START, leaving\n"); cfg_save(); plat_quit(0); }
         press = input_press(held);
+        music_set_scene(music_scene());
+        music_update(g_now);
 
         gems_update();
         pops_update();
@@ -1203,7 +1226,14 @@ int main(void) {
             if (press & B_UP) { g_sel = (g_sel + g_nrows - 1) % g_nrows; snd_play(SND_CLICK); }
             if (press & B_DOWN) { g_sel = (g_sel + 1) % g_nrows; snd_play(SND_CLICK); }
             id = g_rows[g_sel].id;
-            if ((press & (B_LEFT | B_RIGHT)) && (id == R_SOUND || id == R_HINTS)) press |= B_A;
+            if (id == R_MVOL && (press & (B_LEFT | B_RIGHT | B_A | B_START))) {     /* 10% steps; A wraps round from 100 to 0 */
+                int v = g_musicvol + ((press & B_LEFT) ? -10 : 10);
+                if (v > 100) v = (press & B_RIGHT) ? 100 : 0;
+                g_musicvol = v < 0 ? 0 : v;
+                music_set_volume(g_musicvol); cfg_save(); build_title_rows(); snd_play(SND_CLICK);
+                press &= ~(B_LEFT | B_RIGHT | B_A | B_START);
+            }
+            if ((press & (B_LEFT | B_RIGHT)) && (id == R_SOUND || id == R_HINTS || id == R_MUSIC)) press |= B_A;
             if (press & (B_A | B_START)) {
                 snd_play(SND_CLICK);
                 if (id == R_GAME) { g_sel_main = g_sel; menu_goto(1, 0); }
@@ -1215,6 +1245,7 @@ int main(void) {
                 else if (id >= R_NORMAL && id <= R_ENDLESS) start_game(id - R_NORMAL, 0);
                 else if (id == R_SOUND) { g_sound = !g_sound; apply_sound(); cfg_save(); build_title_rows(); }
                 else if (id == R_HINTS) { g_hints = !g_hints; cfg_save(); build_title_rows(); }
+                else if (id == R_MUSIC) { g_music = !g_music; apply_music(); cfg_save(); build_title_rows(); }
             }
             if (press & B_B) { if (g_menu) menu_goto(0, g_sel_main); else g_sel = g_nrows - 1; }
             draw_title();
@@ -1241,14 +1272,15 @@ int main(void) {
             break;
         case SC_PAUSE:
             if (press & (B_START | B_B)) { g_paused = 0; g_last_tick = g_now; g_screen = SC_GAME; g_click = 0; if (E.mode == MODE_TIMED) g_last_tick = g_now; hints_arm(); }
-            if (press & B_UP) { g_pause_sel = (g_pause_sel + 4) % 5; snd_play(SND_CLICK); }
-            if (press & B_DOWN) { g_pause_sel = (g_pause_sel + 1) % 5; snd_play(SND_CLICK); }
+            if (press & B_UP) { g_pause_sel = (g_pause_sel + PAUSE_ROWS - 1) % PAUSE_ROWS; snd_play(SND_CLICK); }
+            if (press & B_DOWN) { g_pause_sel = (g_pause_sel + 1) % PAUSE_ROWS; snd_play(SND_CLICK); }
             if (press & (B_A | B_LEFT | B_RIGHT)) {
                 if (g_pause_sel == 0 && (press & B_A)) { g_paused = 0; g_last_tick = g_now; g_screen = SC_GAME; g_click = 0; hints_arm(); }
                 else if (g_pause_sel == 1) { g_hints = !g_hints; cfg_save(); snd_play(SND_CLICK); }
                 else if (g_pause_sel == 2) { g_sound = !g_sound; apply_sound(); cfg_save(); snd_play(SND_CLICK); }
-                else if (g_pause_sel == 3 && (press & B_A)) { g_scores_tab = g_mode_playing; g_scores_hl = -1; g_scores_from_game = -1; g_screen = SC_SCORES; }
-                else if (g_pause_sel == 4 && (press & B_A)) { g_confirm_kind = (E.mode == MODE_ENDLESS) ? 1 : 0; g_conf_sel = 1; g_screen = SC_CONFIRM; if (g_confirm_kind == 0) g_conf_sel = 0; snd_play(SND_CLICK); }
+                else if (g_pause_sel == 3) { g_music = !g_music; apply_music(); cfg_save(); snd_play(SND_CLICK); }
+                else if (g_pause_sel == 4 && (press & B_A)) { g_scores_tab = g_mode_playing; g_scores_hl = -1; g_scores_from_game = -1; g_screen = SC_SCORES; }
+                else if (g_pause_sel == 5 && (press & B_A)) { g_confirm_kind = (E.mode == MODE_ENDLESS) ? 1 : 0; g_conf_sel = 1; g_screen = SC_CONFIRM; if (g_confirm_kind == 0) g_conf_sel = 0; snd_play(SND_CLICK); }
             }
             draw_pause();
             break;
