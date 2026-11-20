@@ -3,7 +3,7 @@ GWELED  -  for the Datafrog SF3500
 
 Swap two neighbouring gems so that three or more of the same kind line up,
 horizontally or vertically. The gems vanish, the ones above fall down, new
-ones drop in and chains of matches score extra. This is Gweled, the free
+ones drop in and chain reactions keep scoring. This is Gweled, the free
 Bejeweled-style game by Sebastien Delestaing and Daniele Napolitano
 (gweled.org), brought to the SF3500 with its own SDL2 front end. The game
 rules, the gem pictures and the sounds are the original's.
@@ -15,7 +15,8 @@ CONTROLS
   D-pad (after A)  swap the picked gem with the neighbour in that direction
                (A on a neighbour works too; A on the same gem, or B, drops it)
   SELECT       show a hint (a gem bounces)
-  START        pause menu: Resume, Hints, Sound, High Scores, Quit to Menu
+  START        pause menu: Resume, Show Hints, Sound Effects, Scores, Quit to Menu
+  SELECT + START   leave Gweled from any screen, back to the front-end
 
 GAME TYPES
 ----------
@@ -26,15 +27,20 @@ GAME TYPES
 Reach the end of a level's bar for a bonus round (eight gems vanish for 10
 points each) and a higher level; every second level raises the points per gem.
 
-HINTS
+MENUS
 -----
-After 15 seconds without a move a possible move bounces. Turn hints off in the
-menu if you would rather work it out.
+  Game       Continue Saved Game (when there is one), Normal, Timed, Endless
+  Settings   Sound Effects on/off, Show Hints on/off
+  Scores     the best ten of the Normal and Timed games (Endless has none)
+  Help       how to play, controls, game types, scoring and levels, about
+  Exit Game  leave Gweled and return to the front-end
+After 15 seconds without a move a possible move bounces; turn hints off in
+Settings if you would rather work it out.
 
 SAVING
 ------
 Quit to Menu (pause menu) offers to save the game. "Continue Saved Game"
-appears on the title screen; a saved game is used once.
+is in the Game menu; a saved game is used once.
 
 FILES (in this folder)
 ----------------------

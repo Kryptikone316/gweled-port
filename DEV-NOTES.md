@@ -25,6 +25,10 @@ Files in the port folder: gweled.cfg (sound, hints, name), gweled.scores (top 10
   score popup bounce-in 500 ms / float up TILE/3 over 800 ms / fade at 700-800 ms, blink 200 ms period halves, hint bounce 350+150 ms
   for 2 s, hint after 15 s idle. Level bar uses the original thresholds (100, 200, 400...); bonus = 8 random single gems (10 pts).
 - Timed mode: every 1.25 s (25 board ticks) the bar drains by steps_for_timer; level-up resets it to the middle.
+- Menus (2026-11-19): Game (Continue Saved Game if any, Normal, Timed, Endless), Settings (Sound Effects, Show Hints), Scores (tabs Normal/Timed/Endless; Endless
+  shows 'not scored'), Help (5 pages: How to Play, Controls, Game Types, Scoring and Levels, About), Exit Game. B goes back one level.
+  SELECT+START at any moment: cfg_save() + plat_quit(0) (display, mixer, SDL shut down, exit code 0) - an unsaved game in progress is NOT saved.
+  Test hooks added: GWL_HELP=<page>, GWL_MSG=<text>, GWL_OSKTEST=<score>. Text-fit check: worst-case names/scores/messages were screenshotted.
 - Pad input is ours: D-pad cursor; A picks; D-pad after A swaps with that neighbour (A on neighbour, A on same gem, B as the original clicks).
   SELECT = hint now. START = pause menu (board hidden, the timer is stopped). Quit to Menu asks to save (normal/timed; endless asks to abort).
 - Quirks kept: bonus gems use x,y in 0..6 only; combo scoring FIXME (6-in-a-row) unchanged; after a bonus the cascade is not scored.

@@ -491,8 +491,9 @@ static int save_read(void) {                         /* validates everything; 0 
 }
 
 /* ------------------------------------------------------------------ screens */
-typedef enum { SC_TITLE, SC_GAME, SC_PAUSE, SC_CONFIRM, SC_NAME, SC_SCORES, SC_ABOUT } Screen;
+typedef enum { SC_TITLE, SC_GAME, SC_PAUSE, SC_CONFIRM, SC_NAME, SC_SCORES, SC_HELP } Screen;
 static Screen g_screen = SC_TITLE;
+static int g_menu, g_sel_main, g_help_page;     /* g_menu: 0 main, 1 Game, 2 Settings */
 static int g_sel, g_pause_sel, g_conf_sel, g_scores_tab, g_scores_hl = -1, g_scores_from_game;
 static int g_mode_playing;
 static unsigned g_last_tick;
@@ -815,31 +816,41 @@ static void osk_draw(int score) {
 }
 
 /* ---- screens: title ---- */
-static const char* const k_mode_desc[3] = { S_DESC_NORMAL, S_DESC_TIMED, S_DESC_ENDLESS };
 
 typedef struct { const char* label; int id; } Row;
-enum { R_CONTINUE = 1, R_NORMAL, R_TIMED, R_ENDLESS, R_SCORES, R_SOUND, R_HINTS, R_ABOUT, R_EXIT };
+enum { R_CONTINUE = 1, R_NORMAL, R_TIMED, R_ENDLESS, R_SOUND, R_HINTS, R_GAME, R_SETTINGS, R_SCORES, R_HELP, R_EXIT };
 static Row g_rows[12];
 static char g_rowtxt[3][32];
 static int g_nrows;
 
+/* Main menu: Game, Settings, Scores, Help, Exit Game.  Game: [Continue Saved Game], Normal, Timed, Endless.
+ * Settings: Sound Effects, Show Hints. */
 static void build_title_rows(void) {
     g_nrows = 0;
-    if (save_exists()) g_rows[g_nrows++] = (Row){ "Continue Game", R_CONTINUE };
-    g_rows[g_nrows++] = (Row){ "Normal Game", R_NORMAL };
-    g_rows[g_nrows++] = (Row){ "Timed Game", R_TIMED };
-    g_rows[g_nrows++] = (Row){ "Endless Game", R_ENDLESS };
-    g_rows[g_nrows++] = (Row){ "High Scores", R_SCORES };
-    snprintf(g_rowtxt[0], sizeof g_rowtxt[0], "Sound: %s", g_sound ? "On" : "Off");
-    snprintf(g_rowtxt[1], sizeof g_rowtxt[1], "Hints: %s", g_hints ? "On" : "Off");
-    g_rows[g_nrows++] = (Row){ g_rowtxt[0], R_SOUND };
-    g_rows[g_nrows++] = (Row){ g_rowtxt[1], R_HINTS };
-    g_rows[g_nrows++] = (Row){ "About", R_ABOUT };
-    g_rows[g_nrows++] = (Row){ "Exit", R_EXIT };
+    if (g_menu == 1) {
+        if (save_exists()) g_rows[g_nrows++] = (Row){ "Continue Saved Game", R_CONTINUE };
+        g_rows[g_nrows++] = (Row){ S_TITLE_NORMAL, R_NORMAL };
+        g_rows[g_nrows++] = (Row){ S_TITLE_TIMED, R_TIMED };
+        g_rows[g_nrows++] = (Row){ S_TITLE_ENDLESS, R_ENDLESS };
+    } else if (g_menu == 2) {
+        snprintf(g_rowtxt[0], sizeof g_rowtxt[0], "Sound Effects: %s", g_sound ? "On" : "Off");
+        snprintf(g_rowtxt[1], sizeof g_rowtxt[1], "Show Hints: %s", g_hints ? "On" : "Off");
+        g_rows[g_nrows++] = (Row){ g_rowtxt[0], R_SOUND };
+        g_rows[g_nrows++] = (Row){ g_rowtxt[1], R_HINTS };
+    } else {
+        g_rows[g_nrows++] = (Row){ "Game", R_GAME };
+        g_rows[g_nrows++] = (Row){ "Settings", R_SETTINGS };
+        g_rows[g_nrows++] = (Row){ "Scores", R_SCORES };
+        g_rows[g_nrows++] = (Row){ "Help", R_HELP };
+        g_rows[g_nrows++] = (Row){ "Exit Game", R_EXIT };
+    }
 }
 
-static void wrap_text(const Font* f, int cx, int y, int maxw, uint32_t col, const char* s) {
-    char line[160];
+static void menu_goto(int menu, int sel) { g_menu = menu; build_title_rows(); g_sel = sel < g_nrows ? sel : 0; }
+
+/* Word-wraps s into maxw pixels; centred on x (centre != 0) or starting at x. Returns the y below the last line. */
+static int wrap_lines(const Font* f, int x, int y, int maxw, uint32_t col, const char* s, int centre) {
+    char line[200];
     const char* p = s;
     while (*p) {
         int n = 0, last = -1;
@@ -849,18 +860,35 @@ static void wrap_text(const Font* f, int cx, int y, int maxw, uint32_t col, cons
             if (font_w(f, line) > maxw) { if (last > 0) n = last; break; }
             n++;
         }
-        if (!p[n]) { memcpy(line, p, (size_t)n); line[n] = 0; d_text_c(f, cx, y, col, 0, 255, line); break; }
         memcpy(line, p, (size_t)n); line[n] = 0;
-        d_text_c(f, cx, y, col, 0, 255, line);
+        if (centre) d_text_c(f, x, y, col, 0, 255, line); else d_text(f, x, y, col, 0, 255, line);
         y += font_h(f) + 2;
         p += n; while (*p == ' ') p++;
+    }
+    return y;
+}
+static void wrap_text(const Font* f, int cx, int y, int maxw, uint32_t col, const char* s) { wrap_lines(f, cx, y, maxw, col, s, 1); }
+
+static const char* row_description(int id) {
+    switch (id) {
+    case R_GAME: return "Start a new game or pick up a saved one.";
+    case R_SETTINGS: return "Sound effects and hints.";
+    case R_SCORES: return "The best scores of each game type.";
+    case R_HELP: return "How to play, the controls and the game types.";
+    case R_EXIT: return "Leave Gweled and go back to the menu.";
+    case R_CONTINUE: return "Pick up the game you saved earlier.";
+    case R_NORMAL: return S_DESC_NORMAL;
+    case R_TIMED: return S_DESC_TIMED;
+    case R_ENDLESS: return S_DESC_ENDLESS;
+    case R_SOUND: return "Turn the sound effects on or off.";
+    case R_HINTS: return "Show a possible move after 15 seconds without one.";
+    default: return "";
     }
 }
 
 static void draw_title(void) {
-    int i, y;
+    int i, y, rowh = 40, pw = 260, head = g_menu ? 34 : 0, ph, maxw = 0;
     Font *f14 = font_get("f14");
-    const Row* r = &g_rows[g_sel];
     const char* rows[12];
     d_target(g_screenbuf);
     d_clip(0, 0, SCR_W, SCR_H);
@@ -871,17 +899,15 @@ static void draw_title(void) {
         float k = 0.5f + 0.5f * sinf((float)g_now / 380.0f - i * 0.7f);
         d_img_s(&g_gemimg[i], 320 + (i - 3) * 62, 100 - 5 * k, 0.9f, 0.9f, 255);
     }
-    for (i = 0; i < g_nrows; i++) rows[i] = g_rows[i].label;
-    y = 142;
-    {
-        int rowh = g_nrows > 8 ? 31 : 36;
-        panel_box(160, y - 10, 320, g_nrows * rowh + 14);
-        draw_menu_rows(320, y, 296, rowh, rows, g_nrows, g_sel);
-    }
-    if (r->id >= R_NORMAL && r->id <= R_ENDLESS) wrap_text(f14, SCR_W / 2, 432, 600, COL_DIM, k_mode_desc[r->id - R_NORMAL]);
-    else if (r->id == R_CONTINUE) wrap_text(f14, SCR_W / 2, 432, 600, COL_DIM, "Pick up the game you saved earlier.");
-    else if (r->id == R_SCORES) wrap_text(f14, SCR_W / 2, 432, 600, COL_DIM, "The best scores of the normal and timed games.");
-    d_text_c(f14, SCR_W / 2, 460, 0x6a5a50, 0, 255, "Up/Down  choose     A  select");
+    for (i = 0; i < g_nrows; i++) { rows[i] = g_rows[i].label; if (font_w(font_get("f24"), rows[i]) > maxw) maxw = font_w(font_get("f24"), rows[i]); }
+    if (maxw + 56 > pw) pw = maxw + 56;
+    ph = head + g_nrows * rowh + 16;
+    y = 150;
+    panel_box(320 - pw / 2, y - 10, pw, ph);
+    if (g_menu) d_text_c(font_get("f18"), 320, y - 2, COL_GOLD, 0, 255, g_menu == 1 ? "Game" : "Settings");
+    draw_menu_rows(320, y + head, pw - 24, rowh, rows, g_nrows, g_sel);
+    wrap_text(f14, SCR_W / 2, 432, 600, COL_DIM, row_description(g_rows[g_sel].id));
+    d_text_c(f14, SCR_W / 2, 460, 0x6a5a50, 0, 255, g_menu ? "Up/Down  choose     A  select     B  back" : "Up/Down  choose     A  select");
 }
 
 static void draw_scores(void) {
@@ -890,13 +916,17 @@ static void draw_scores(void) {
     char b[48];
     draw_bg_only();
     d_text_c(font_get("o36"), SCR_W / 2, 14, COL_GOLD, 0x000000, 255, "High Scores");
-    for (i = 0; i < 2; i++) {
-        int tx = 200 + i * 130;
+    for (i = 0; i < 3; i++) {
+        int tx = 130 + i * 130;
         d_round_a(tx, 66, 120, 32, 8, g_scores_tab == i ? COL_GOLD : 0xffffff, g_scores_tab == i ? 200 : 30);
-        d_text_c(f18, tx + 60, 71, g_scores_tab == i ? 0x000000 : COL_TEXT, 0, 255, i ? S_TITLE_TIMED : S_TITLE_NORMAL);
+        d_text_c(f18, tx + 60, 71, g_scores_tab == i ? 0x000000 : COL_TEXT, 0, 255, i == 0 ? S_TITLE_NORMAL : i == 1 ? S_TITLE_TIMED : S_TITLE_ENDLESS);
     }
     panel_box(120, y - 6, 400, 10 * 32 + 12);
-    for (i = 0; i < NSC; i++) {
+    if (g_scores_tab == 2) {
+        d_text_c(f18, SCR_W / 2, y + 120, COL_TEXT, 0, 255, "Endless games are not scored.");
+        d_text_c(f14, SCR_W / 2, y + 156, COL_DIM, 0, 255, "Play Normal or Timed to get on the board.");
+    }
+    for (i = 0; i < NSC && g_scores_tab < 2; i++) {
         const Score* s = &g_scores[g_scores_tab][i];
         int hl = (g_scores_hl == i && g_scores_tab == g_scores_from_game);
         if (hl) d_round_a(130, y + i * 32 - 1, 380, 30, 6, COL_GOLD, 60);
@@ -914,30 +944,80 @@ static void draw_scores(void) {
         } else d_text(f18, 180, y + i * 32 + 2, 0x5a4a44, 0, 255, "-");
     }
     (void)f24;
-    d_text_c(f14, SCR_W / 2, 454, COL_DIM, 0, 255, "Left/Right  switch game type     A or B  back");
+    d_text_c(f14, SCR_W / 2, 454, COL_DIM, 0, 255, "Left/Right  game type     A or B  back");
 }
 
-static void draw_about(void) {
-    Font *f14 = font_get("f14"), *f18 = font_get("f18");
-    int y = 112;
+#define HELP_PAGES 5
+static const char* const k_help_title[HELP_PAGES] = { "How to Play", "Controls", "Game Types", "Scoring and Levels", "About" };
+
+static void help_key(int y_key, const char* key, const char* what, int* y) {
+    Font* f = font_get("f14");
+    d_text(f, 74, *y, COL_GOLD, 0, 255, key);
+    *y = wrap_lines(f, 220, *y, 340, COL_TEXT, what, 0) + 7;
+    (void)y_key;
+}
+
+static void draw_help(void) {
+    Font *f14 = font_get("f14"), *f18 = font_get("f18"), *f24 = font_get("f24");
+    int y = 100, i, W = 500;
+    char b[32];
     draw_bg_only();
-    d_text_c(font_get("o52"), SCR_W / 2, 14, COL_GOLD, 0x000000, 255, "Gweled");
-    panel_box(70, 90, 500, 340);
-    d_text_c(f18, SCR_W / 2, y, COL_TEXT, 0, 255, "A puzzle game with gems"); y += 30;
-    d_text_c(f14, SCR_W / 2, y, COL_DIM, 0, 255, "Version 1.0-beta2 for the Datafrog SF3500"); y += 30;
-    d_text_c(f14, SCR_W / 2, y, COL_TEXT, 0, 255, "Original game by Sebastien Delestaing and Daniele Napolitano"); y += 22;
-    d_text_c(f14, SCR_W / 2, y, COL_TEXT, 0, 255, "With Wesley Ellis    Explode sound by Crunchpix"); y += 22;
-    d_text_c(f14, SCR_W / 2, y, COL_TEXT, 0, 255, "gweled.org"); y += 34;
-    d_text_c(f14, SCR_W / 2, y, COL_TEXT, 0, 255, "SF3500 version by AthruZ (Kryptikone316)"); y += 34;
-    d_text_c(f14, SCR_W / 2, y, COL_DIM, 0, 255, "GNU General Public License, version 2 or later."); y += 22;
-    d_text_c(f14, SCR_W / 2, y, COL_DIM, 0, 255, "Text set in DejaVu Sans Bold (free licence)."); y += 34;
-    d_text_c(f14, SCR_W / 2, y, COL_GOLD, 0, 255, "Make rows of three or more gems.");
-    d_text_c(f14, SCR_W / 2, 458, COL_DIM, 0, 255, "A or B  back");
+    d_text_c(font_get("o36"), SCR_W / 2, 10, COL_GOLD, 0x000000, 255, "Help");
+    panel_box(50, 62, 540, 380);
+    d_text_c(f24, SCR_W / 2, 72, COL_GOLD, 0, 255, k_help_title[g_help_page]);
+    d_rect(80, 104, 480, 1, 0x5a4020);
+    y = 116;
+    switch (g_help_page) {
+    case 0:
+        y = wrap_lines(f18, 74, y, W, COL_TEXT, "Swap two neighbouring gems so that three or more of the same kind line up in a row or a column.", 0) + 8;
+        y = wrap_lines(f18, 74, y, W, COL_TEXT, "The matched gems burst, the gems above fall down and new ones drop in from the top. Chain reactions keep scoring.", 0) + 8;
+        y = wrap_lines(f18, 74, y, W, COL_TEXT, "A swap that makes no match slides back.", 0) + 8;
+        y = wrap_lines(f18, 74, y, W, COL_TEXT, "The game ends when there are no moves left.", 0) + 12;
+        for (i = 0; i < 7; i++) d_img_s(&g_gemimg[i], 320 + (i - 3) * 50, y + 26, 0.7f, 0.7f, 255);
+        break;
+    case 1:
+        help_key(0, "D-pad", "Move the cursor around the board.", &y);
+        help_key(0, "A", "Pick the gem under the cursor.", &y);
+        help_key(0, "A, then D-pad", "Swap the gem with its neighbour that way.", &y);
+        help_key(0, "B", "Put a picked gem down again.", &y);
+        help_key(0, "SELECT", "Show a hint (a gem bounces).", &y);
+        help_key(0, "START", "Pause menu: settings, save and quit.", &y);
+        help_key(0, "In the menus", "D-pad chooses, A selects, B goes back.", &y);
+        help_key(0, "SELECT + START", "Leave Gweled from any screen.", &y);
+        break;
+    case 2:
+        d_text(f18, 74, y, COL_GOLD, 0, 255, S_TITLE_NORMAL); y = wrap_lines(f14, 74, y + 24, W, COL_TEXT, "Play until no moves are left. Fill the bar to reach the next level.", 0) + 10;
+        d_text(f18, 74, y, COL_GOLD, 0, 255, S_TITLE_TIMED); y = wrap_lines(f14, 74, y + 24, W, COL_TEXT, "The bar drains as time passes and matches refill it. When it is empty the game is over. A new level refills it to the middle.", 0) + 10;
+        d_text(f18, 74, y, COL_GOLD, 0, 255, S_TITLE_ENDLESS); y = wrap_lines(f14, 74, y + 24, W, COL_TEXT, "No levels and no end: when no moves are left the board is shuffled. Scores are not recorded.", 0) + 10;
+        d_text(f18, 74, y, COL_GOLD, 0, 255, "Saving"); wrap_lines(f14, 74, y + 24, W, COL_TEXT, "Quit to Menu in the pause menu can save a Normal or Timed game. Continue it from the Game menu.", 0);
+        break;
+    case 3:
+        y = wrap_lines(f14, 74, y, W, COL_TEXT, "A match scores 10 points for each gem beyond the second: three gems 10, four 20, five 30. The points are multiplied by the level's multiplier.", 0) + 8;
+        y = wrap_lines(f14, 74, y, W, COL_TEXT, "Clear 100 gems for level 2, 200 for level 3, 400 for level 4, and so on. The bar shows how far you are.", 0) + 8;
+        y = wrap_lines(f14, 74, y, W, COL_TEXT, "Each new level starts with a Bonus: eight gems burst for 10 points each. The multiplier goes up every second level: x2 at level 2, x3 at level 4, x4 at level 6.", 0) + 8;
+        y = wrap_lines(f14, 74, y, W, COL_TEXT, "Hints: after 15 seconds without a move, a gem that can make a match bounces. SELECT shows one at once. Hints can be turned off in Settings.", 0) + 8;
+        break;
+    default:
+        d_text_c(f18, SCR_W / 2, y, COL_TEXT, 0, 255, "A puzzle game with gems"); y += 30;
+        d_text_c(f14, SCR_W / 2, y, COL_DIM, 0, 255, "Version 1.0-beta2 for the Datafrog SF3500"); y += 30;
+        d_text_c(f14, SCR_W / 2, y, COL_TEXT, 0, 255, "Original game by Sebastien Delestaing and Daniele Napolitano"); y += 22;
+        d_text_c(f14, SCR_W / 2, y, COL_TEXT, 0, 255, "With Wesley Ellis    Explode sound by Crunchpix"); y += 22;
+        d_text_c(f14, SCR_W / 2, y, COL_TEXT, 0, 255, "gweled.org"); y += 34;
+        d_text_c(f14, SCR_W / 2, y, COL_TEXT, 0, 255, "SF3500 version by AthruZ (Kryptikone316)"); y += 34;
+        d_text_c(f14, SCR_W / 2, y, COL_DIM, 0, 255, "GNU General Public License, version 2 or later."); y += 22;
+        d_text_c(f14, SCR_W / 2, y, COL_DIM, 0, 255, "Text set in DejaVu Sans Bold (free licence)."); y += 34;
+        break;
+    }
+    snprintf(b, sizeof b, "Page %d of %d", g_help_page + 1, HELP_PAGES);
+    d_text_c(f14, SCR_W / 2, 416, COL_DIM, 0, 255, b);
+    if (g_help_page > 0) d_text(f14, 70, 416, COL_GOLD, 0, 255, "< Left");
+    if (g_help_page < HELP_PAGES - 1) d_text_r(f14, 570, 416, COL_GOLD, 0, 255, "Right >");
+    d_text_c(f14, SCR_W / 2, 456, COL_DIM, 0, 255, "Left/Right  page     B  back");
 }
 
-static const char* const k_pause_rows_base[] = { "Resume", "Hints", "Sound", "High Scores", "Quit to Menu" };
+static const char* const k_pause_rows_base[] = { "Resume", "Hints", "Sound", "Scores", "Quit to Menu" };
 static void draw_pause(void) {
-    char hints[24], snd[24];
+    char hints[32], snd[32];
     const char* rows[5];
     d_target(g_screenbuf);
     d_clip(0, 0, SCR_W, SCR_H);
@@ -945,12 +1025,12 @@ static void draw_pause(void) {
     draw_pops();
     draw_panel();
     d_rect_a(BX, BY, BSIZE, BSIZE, 0x000000, 150);
-    snprintf(hints, sizeof hints, "Hints: %s", g_hints ? "On" : "Off");
-    snprintf(snd, sizeof snd, "Sound: %s", g_sound ? "On" : "Off");
+    snprintf(hints, sizeof hints, "Show Hints: %s", g_hints ? "On" : "Off");
+    snprintf(snd, sizeof snd, "Sound Effects: %s", g_sound ? "On" : "Off");
     rows[0] = k_pause_rows_base[0]; rows[1] = hints; rows[2] = snd; rows[3] = k_pause_rows_base[3]; rows[4] = k_pause_rows_base[4];
-    panel_box(BX + 90, BY + 70, 268, 5 * 40 + 70);
+    panel_box(BX + 74, BY + 70, 300, 5 * 40 + 70);
     d_text_c(font_get("o36"), BX + BSIZE / 2, BY + 78, COL_GOLD, 0x000000, 255, "Paused");
-    draw_menu_rows(BX + BSIZE / 2, BY + 134, 240, 40, rows, 5, g_pause_sel);
+    draw_menu_rows(BX + BSIZE / 2, BY + 134, 276, 40, rows, 5, g_pause_sel);
 }
 
 static void draw_confirm(void) {
@@ -1032,7 +1112,7 @@ static void bot_think(void) {
 static void leave_to_title(void) {
     g_running = 0; g_paused = 0; g_over_dim = 0;
     gem_clear_all(); pops_clear(-1); clear_cursors();
-    build_title_rows(); g_sel = 0; g_screen = SC_TITLE;
+    menu_goto(0, 0); g_screen = SC_TITLE;
 }
 static void finish_game_to_scores(void) {
     /* the game is over: score entry (if it ranks) then the table */
@@ -1066,12 +1146,16 @@ int main(void) {
     build_title_rows();
     g_now = now_ms();
     if (getenv("GWL_AUTOSTART")) start_game(atoi(getenv("GWL_AUTOSTART")), 0);
+    if (getenv("GWL_HELP")) { g_help_page = atoi(getenv("GWL_HELP")); g_screen = SC_HELP; }                 /* test hook */
     if (getenv("GWL_MSG")) message(getenv("GWL_MSG"), 0);                                   /* test hook: a game message */
     if (getenv("GWL_OSKTEST")) { E.score = atoi(getenv("GWL_OSKTEST")); g_mode_playing = 0; osk_open("WWWWWWWWWWWW"); g_screen = SC_NAME; }   /* test hook */
 
     for (;;) {
         unsigned held = plat_buttons(), press;
         g_now = now_ms();
+        /* SELECT + START together leave the port from any screen: options are already on disk, then the display, the mixer
+         * and SDL are shut down (plat_quit) and the process ends with 0, back to the front-end. */
+        if ((held & (B_SELECT | B_START)) == (B_SELECT | B_START)) { fprintf(stderr, "gweled: SELECT+START, leaving\n"); cfg_save(); plat_quit(0); }
         press = input_press(held);
 
         gems_update();
@@ -1087,15 +1171,17 @@ int main(void) {
             if ((press & (B_LEFT | B_RIGHT)) && (id == R_SOUND || id == R_HINTS)) press |= B_A;
             if (press & (B_A | B_START)) {
                 snd_play(SND_CLICK);
-                if (id == R_CONTINUE) { if (save_read()) { start_game(E.mode, 1); save_remove(); } else { save_remove(); build_title_rows(); g_sel = 0; } }
+                if (id == R_GAME) { g_sel_main = g_sel; menu_goto(1, 0); }
+                else if (id == R_SETTINGS) { g_sel_main = g_sel; menu_goto(2, 0); }
+                else if (id == R_SCORES) { g_sel_main = g_sel; g_scores_tab = 0; g_scores_hl = -1; g_scores_from_game = -1; g_screen = SC_SCORES; }
+                else if (id == R_HELP) { g_sel_main = g_sel; g_help_page = 0; g_screen = SC_HELP; }
+                else if (id == R_EXIT) plat_quit(0);                     /* clean exit: display, mixer and SDL are shut down there */
+                else if (id == R_CONTINUE) { if (save_read()) { start_game(E.mode, 1); save_remove(); } else { save_remove(); menu_goto(1, 0); } }
                 else if (id >= R_NORMAL && id <= R_ENDLESS) start_game(id - R_NORMAL, 0);
-                else if (id == R_SCORES) { g_scores_tab = 0; g_scores_hl = -1; g_scores_from_game = -1; g_screen = SC_SCORES; }
                 else if (id == R_SOUND) { g_sound = !g_sound; apply_sound(); cfg_save(); build_title_rows(); }
                 else if (id == R_HINTS) { g_hints = !g_hints; cfg_save(); build_title_rows(); }
-                else if (id == R_ABOUT) g_screen = SC_ABOUT;
-                else if (id == R_EXIT) plat_quit(0);
             }
-            if (press & B_B) { if (g_nrows) g_sel = g_nrows - 1; }
+            if (press & B_B) { if (g_menu) menu_goto(0, g_sel_main); else g_sel = g_nrows - 1; }
             draw_title();
             break;
         }
@@ -1126,7 +1212,7 @@ int main(void) {
                 if (g_pause_sel == 0 && (press & B_A)) { g_paused = 0; g_last_tick = g_now; g_screen = SC_GAME; g_click = 0; hints_arm(); }
                 else if (g_pause_sel == 1) { g_hints = !g_hints; cfg_save(); snd_play(SND_CLICK); }
                 else if (g_pause_sel == 2) { g_sound = !g_sound; apply_sound(); cfg_save(); snd_play(SND_CLICK); }
-                else if (g_pause_sel == 3 && (press & B_A)) { g_scores_tab = g_mode_playing == 1; g_scores_hl = -1; g_scores_from_game = -1; g_screen = SC_SCORES; }
+                else if (g_pause_sel == 3 && (press & B_A)) { g_scores_tab = g_mode_playing; g_scores_hl = -1; g_scores_from_game = -1; g_screen = SC_SCORES; }
                 else if (g_pause_sel == 4 && (press & B_A)) { g_confirm_kind = (E.mode == MODE_ENDLESS) ? 1 : 0; g_conf_sel = 1; g_screen = SC_CONFIRM; if (g_confirm_kind == 0) g_conf_sel = 0; snd_play(SND_CLICK); }
             }
             draw_pause();
@@ -1152,16 +1238,19 @@ int main(void) {
             draw_bg_only(); osk_draw(E.score);
             break;
         case SC_SCORES:
-            if (press & (B_LEFT | B_RIGHT)) { g_scores_tab = !g_scores_tab; snd_play(SND_CLICK); }
+            if (press & B_LEFT) { g_scores_tab = (g_scores_tab + 2) % 3; snd_play(SND_CLICK); }
+            if (press & B_RIGHT) { g_scores_tab = (g_scores_tab + 1) % 3; snd_play(SND_CLICK); }
             if (press & (B_A | B_B | B_START)) {
                 if (g_running || g_paused) { if (g_over_dim) leave_to_title(); else g_screen = SC_PAUSE; }
-                else leave_to_title();
+                else menu_goto(0, g_sel_main), g_screen = SC_TITLE;
             }
             draw_scores();
             break;
-        case SC_ABOUT:
-            if (press & (B_A | B_B | B_START)) g_screen = SC_TITLE;
-            draw_about();
+        case SC_HELP:
+            if (press & B_LEFT) { if (g_help_page > 0) { g_help_page--; snd_play(SND_CLICK); } }
+            if (press & B_RIGHT) { if (g_help_page < HELP_PAGES - 1) { g_help_page++; snd_play(SND_CLICK); } }
+            if (press & B_B) { menu_goto(0, g_sel_main); g_screen = SC_TITLE; }
+            draw_help();
             break;
         }
         plat_present();
