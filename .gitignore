@@ -3,3 +3,5 @@ build-sf3500/
 package/
 work/
 assets/gweled.pak
+build-asan/
+devroot/
