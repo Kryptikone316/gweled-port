@@ -11,7 +11,7 @@ Original source tree: ~/handhelds/Development/Datafrog/SF3500/ports/gweled/Insta
     ./build_host.sh                                    # desktop, build-host/gweled
     ./build_sf3500.sh                                  # MIPS, build-sf3500/gweled.stripped.mipsel (toolchain in sf3000-work/buildroot)
     ./package.sh                                       # package/Gweled.sh + package/gweled/ (binary, README, NOTICE, licenses, source tarball)
-Box art: package-src/boxart.png = 500x500 of ports/gweled/screenshot.png (the user's floppy-disk art); the card needs sync-boxart.sh.
+Box art: package-src/boxart.png = 500x500 RGBA of ports/gweled/screenshot.png (the user's floppy-disk art, transparent background so the floppy stands alone); the card needs sync-boxart.sh.
 
 ## Layout
 - src/engine.c/.h  rules; E (Eng) holds board, gem objects, score, level, bonus. Own xorshift RNG (same sequence everywhere).
